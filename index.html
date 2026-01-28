@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TSN Manager - Simulation</title>
+  <title>KETI TSN UI - Simulation</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -13,24 +13,25 @@
       <div class="sidebar-header">
         <img src="keti.png" alt="KETI" class="sidebar-logo">
         <div class="sidebar-title">TSN Switch Manager</div>
+        <div class="sidebar-subtitle">Simulation Mode</div>
       </div>
 
       <nav>
         <div class="nav-section">
           <div class="nav-section-title">Dashboards</div>
-          <a href="#ptp" class="nav-item active" data-page="ptp">
+          <a href="#ptp-dashboard" class="nav-item active" data-page="ptp-dashboard">
             <svg class="nav-item-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <span>PTP Dashboard</span>
           </a>
-          <a href="#tas" class="nav-item" data-page="tas">
+          <a href="#tas-dashboard" class="nav-item" data-page="tas-dashboard">
             <svg class="nav-item-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
             <span>TAS Dashboard</span>
           </a>
-          <a href="#cbs" class="nav-item" data-page="cbs">
+          <a href="#cbs-dashboard" class="nav-item" data-page="cbs-dashboard">
             <svg class="nav-item-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
@@ -39,437 +40,98 @@
         </div>
 
         <div class="nav-section">
-          <div class="nav-section-title">Overview</div>
-          <a href="#devices" class="nav-item" data-page="devices">
+          <div class="nav-section-title">Configuration</div>
+          <a href="#ptp-config" class="nav-item" data-page="ptp-config">
+            <svg class="nav-item-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>PTP (802.1AS)</span>
+          </a>
+          <a href="#tas-config" class="nav-item" data-page="tas-config">
+            <svg class="nav-item-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <span>TAS (802.1Qbv)</span>
+          </a>
+          <a href="#cbs-config" class="nav-item" data-page="cbs-config">
+            <svg class="nav-item-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <span>CBS (802.1Qav)</span>
+          </a>
+        </div>
+
+        <div class="nav-section">
+          <div class="nav-section-title">Tools</div>
+          <a href="#ports" class="nav-item" data-page="ports">
             <svg class="nav-item-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
             </svg>
-            <span>Device Status</span>
+            <span>Port Status</span>
+          </a>
+          <a href="#capture" class="nav-item" data-page="capture">
+            <svg class="nav-item-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+            <span>Packet Capture</span>
+          </a>
+          <a href="#traffic" class="nav-item" data-page="traffic">
+            <svg class="nav-item-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <span>Traffic Generator</span>
+          </a>
+        </div>
+
+        <div class="nav-section">
+          <div class="nav-section-title">System</div>
+          <a href="#settings" class="nav-item" data-page="settings">
+            <svg class="nav-item-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <span>Settings</span>
           </a>
         </div>
       </nav>
+
+      <div class="sidebar-footer">
+        <div class="sim-badge">SIMULATION</div>
+      </div>
     </aside>
 
     <!-- Main Content -->
     <main class="main-content">
 
       <!-- PTP Dashboard -->
-      <div id="page-ptp" class="page">
-        <div class="page-header">
-          <h1 class="page-title">PTP Synchronization</h1>
-          <div class="header-right">
-            <span id="ptp-status" class="status-badge success">Locked</span>
-          </div>
-        </div>
-
-        <!-- Board Selector -->
-        <div class="board-selector" id="ptp-board-selector"></div>
-
-        <!-- Metrics -->
-        <div class="metrics-grid">
-          <div class="metric-card">
-            <div class="metric-label">Clock Offset</div>
-            <div class="metric-value" id="ptp-offset">0.0</div>
-            <div class="metric-unit">nanoseconds</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Path Delay</div>
-            <div class="metric-value" id="ptp-delay">0.00</div>
-            <div class="metric-unit">microseconds</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Steps Removed</div>
-            <div class="metric-value" id="ptp-steps">0</div>
-            <div class="metric-unit">from GM</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Clock Class</div>
-            <div class="metric-value" id="ptp-class">6</div>
-            <div class="metric-unit">IEEE 1588</div>
-          </div>
-        </div>
-
-        <!-- Offset Graph -->
-        <div class="card">
-          <div class="card-header">
-            <h2 class="card-title">Clock Offset History</h2>
-            <span class="card-subtitle" id="ptp-samples">0 samples @ 8Hz</span>
-          </div>
-          <canvas id="ptp-graph" width="900" height="280"></canvas>
-        </div>
-
-        <!-- Clock Details -->
-        <div class="grid-2">
-          <div class="card">
-            <div class="card-header">
-              <h2 class="card-title">Clock Properties</h2>
-            </div>
-            <table class="table">
-              <tbody>
-                <tr><td>GM Identity</td><td id="ptp-gm-id">E6:F4:41:FF:FE:C9:57:01</td></tr>
-                <tr><td>Clock Class</td><td id="ptp-clock-class">6</td></tr>
-                <tr><td>Clock Accuracy</td><td id="ptp-accuracy">0x21</td></tr>
-                <tr><td>Priority 1</td><td id="ptp-priority1">128</td></tr>
-                <tr><td>Priority 2</td><td id="ptp-priority2">128</td></tr>
-                <tr><td>Domain</td><td>0</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <div class="card">
-            <div class="card-header">
-              <h2 class="card-title">Port Configuration</h2>
-            </div>
-            <table class="table">
-              <tbody>
-                <tr><td>Port State</td><td id="ptp-port-state">MASTER</td></tr>
-                <tr><td>Sync Interval</td><td>125ms (2^-3)</td></tr>
-                <tr><td>Announce Interval</td><td>1s (2^0)</td></tr>
-                <tr><td>Pdelay Interval</td><td>1s (2^0)</td></tr>
-                <tr><td>Profile</td><td>IEEE 802.1AS</td></tr>
-                <tr><td>Transport</td><td>L2 (Ethernet)</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- All Boards -->
-        <div class="card">
-          <div class="card-header">
-            <h2 class="card-title">All Boards Status</h2>
-          </div>
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Board</th>
-                <th>Role</th>
-                <th>State</th>
-                <th style="text-align:right">Offset (ns)</th>
-                <th style="text-align:right">Path Delay (μs)</th>
-                <th style="text-align:center">Sync Status</th>
-              </tr>
-            </thead>
-            <tbody id="ptp-boards-table"></tbody>
-          </table>
-        </div>
-      </div>
+      <div id="page-ptp-dashboard" class="page"></div>
 
       <!-- TAS Dashboard -->
-      <div id="page-tas" class="page" style="display:none">
-        <div class="page-header">
-          <h1 class="page-title">Time-Aware Shaper</h1>
-          <div class="header-right">
-            <span id="tas-status" class="status-badge success">Enabled</span>
-            <button class="btn btn-secondary" id="tas-toggle">Disable</button>
-          </div>
-        </div>
-
-        <!-- Board & Port Selection -->
-        <div class="selection-row">
-          <div class="selection-group">
-            <div class="selection-label">Board</div>
-            <div class="board-selector" id="tas-board-selector"></div>
-          </div>
-          <div class="selection-group">
-            <div class="selection-label">Port</div>
-            <select id="tas-port" class="form-select">
-              <option value="1">Port 1</option>
-              <option value="2">Port 2</option>
-              <option value="3">Port 3</option>
-              <option value="4">Port 4</option>
-              <option value="5">Port 5</option>
-              <option value="6">Port 6</option>
-              <option value="7">Port 7</option>
-              <option value="8" selected>Port 8</option>
-              <option value="9">Port 9</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="grid-2">
-          <!-- GCL Matrix -->
-          <div class="card">
-            <div class="card-header">
-              <h2 class="card-title">Gate Control List</h2>
-              <span class="card-subtitle" id="tas-gcl-info">TSN Board #1 Port 8</span>
-            </div>
-            <div class="table-container">
-              <table class="table gcl-table">
-                <thead>
-                  <tr>
-                    <th style="width:50px;text-align:center">Slot</th>
-                    <th class="tc-header tc0">TC0</th>
-                    <th class="tc-header tc1">TC1</th>
-                    <th class="tc-header tc2">TC2</th>
-                    <th class="tc-header tc3">TC3</th>
-                    <th class="tc-header tc4">TC4</th>
-                    <th class="tc-header tc5">TC5</th>
-                    <th class="tc-header tc6">TC6</th>
-                    <th class="tc-header tc7">TC7</th>
-                    <th style="text-align:right">Duration</th>
-                  </tr>
-                </thead>
-                <tbody id="tas-gcl-table"></tbody>
-              </table>
-            </div>
-            <div class="gcl-info">
-              <span>Cycle: 1000ms</span>
-              <span>Entries: 8</span>
-              <span>Guard Band: 256ns</span>
-            </div>
-          </div>
-
-          <!-- Traffic Test -->
-          <div class="card">
-            <div class="card-header">
-              <h2 class="card-title">Traffic Test</h2>
-            </div>
-            <div class="form-group">
-              <div class="selection-label">Traffic Classes</div>
-              <div class="tc-badges">
-                <span class="tc-badge tc0">TC0</span>
-                <span class="tc-badge tc1">TC1</span>
-                <span class="tc-badge tc2">TC2</span>
-                <span class="tc-badge tc3">TC3</span>
-                <span class="tc-badge tc4">TC4</span>
-                <span class="tc-badge tc5">TC5</span>
-                <span class="tc-badge tc6">TC6</span>
-                <span class="tc-badge tc7">TC7</span>
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">VLAN ID</label>
-                <input type="number" class="form-input" value="100" id="tas-vlan">
-              </div>
-              <div class="form-group">
-                <label class="form-label">PPS / TC</label>
-                <input type="number" class="form-input" value="50" id="tas-pps">
-              </div>
-              <div class="form-group">
-                <label class="form-label">Duration (s)</label>
-                <input type="number" class="form-input" value="5" id="tas-duration">
-              </div>
-            </div>
-            <div id="tas-progress" class="progress-container" style="display:none">
-              <div class="progress-header">
-                <span>Capturing...</span>
-                <span id="tas-progress-value">0%</span>
-              </div>
-              <div class="progress-bar">
-                <div class="progress-fill" id="tas-progress-fill"></div>
-              </div>
-            </div>
-            <button class="btn btn-primary btn-block" id="tas-test-btn">Start Test</button>
-          </div>
-        </div>
-
-        <!-- GCL Timeline -->
-        <div class="card">
-          <div class="card-header">
-            <h2 class="card-title">GCL Timeline</h2>
-            <span class="card-subtitle">1 second cycle</span>
-          </div>
-          <div id="tas-timeline"></div>
-          <div class="timeline-labels">
-            <span>0ms</span><span>125</span><span>250</span><span>375</span><span>500</span><span>625</span><span>750</span><span>875</span><span>1000ms</span>
-          </div>
-        </div>
-
-        <!-- Test Results -->
-        <div class="card" id="tas-results" style="display:none">
-          <div class="card-header">
-            <h2 class="card-title">Test Results</h2>
-            <span class="status-badge success">Complete</span>
-          </div>
-          <table class="table">
-            <thead>
-              <tr>
-                <th style="width:80px">TC</th>
-                <th>Class</th>
-                <th style="text-align:right">TX</th>
-                <th style="text-align:right">RX</th>
-                <th style="text-align:right">Avg Latency</th>
-                <th style="text-align:right">Max Latency</th>
-                <th style="text-align:right">Jitter</th>
-                <th style="text-align:center">Status</th>
-              </tr>
-            </thead>
-            <tbody id="tas-results-table"></tbody>
-          </table>
-          <div class="result-analysis">
-            <strong>Analysis:</strong> TAS is shaping traffic correctly. TC1-TC7 show slot-based latency (~125ms max), TC0 passes directly.
-          </div>
-        </div>
-      </div>
+      <div id="page-tas-dashboard" class="page" style="display:none"></div>
 
       <!-- CBS Dashboard -->
-      <div id="page-cbs" class="page" style="display:none">
-        <div class="page-header">
-          <h1 class="page-title">Credit-Based Shaper</h1>
-          <div class="header-right">
-            <span id="cbs-status" class="status-badge success">Active</span>
-          </div>
-        </div>
+      <div id="page-cbs-dashboard" class="page" style="display:none"></div>
 
-        <!-- Board & Port Selection -->
-        <div class="selection-row">
-          <div class="selection-group">
-            <div class="selection-label">Board</div>
-            <div class="board-selector" id="cbs-board-selector"></div>
-          </div>
-          <div class="selection-group">
-            <div class="selection-label">Port</div>
-            <select id="cbs-port" class="form-select">
-              <option value="1">Port 1</option>
-              <option value="2">Port 2</option>
-              <option value="3">Port 3</option>
-              <option value="4">Port 4</option>
-              <option value="5">Port 5</option>
-              <option value="6">Port 6</option>
-              <option value="7">Port 7</option>
-              <option value="8" selected>Port 8</option>
-              <option value="9">Port 9</option>
-            </select>
-          </div>
-        </div>
+      <!-- PTP Config -->
+      <div id="page-ptp-config" class="page" style="display:none"></div>
 
-        <div class="grid-2">
-          <!-- Queue Configuration -->
-          <div class="card">
-            <div class="card-header">
-              <h2 class="card-title">Queue Configuration</h2>
-              <span class="card-subtitle" id="cbs-queue-info">TSN Board #1 Port 8</span>
-            </div>
-            <table class="table">
-              <thead>
-                <tr>
-                  <th>Queue</th>
-                  <th>Traffic Class</th>
-                  <th style="text-align:right">idleSlope</th>
-                  <th style="text-align:right">sendSlope</th>
-                  <th style="text-align:center">CBS</th>
-                </tr>
-              </thead>
-              <tbody id="cbs-queue-table"></tbody>
-            </table>
-          </div>
+      <!-- TAS Config -->
+      <div id="page-tas-config" class="page" style="display:none"></div>
 
-          <!-- Bandwidth Test -->
-          <div class="card">
-            <div class="card-header">
-              <h2 class="card-title">Bandwidth Test</h2>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">Traffic Class</label>
-                <select id="cbs-test-tc" class="form-select">
-                  <option value="5">TC5 - Voice (SR Class A)</option>
-                  <option value="6">TC6 - Video (SR Class B)</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label class="form-label">Bandwidth (Mbps)</label>
-                <input type="number" class="form-input" value="100" id="cbs-bandwidth">
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">Duration (s)</label>
-                <input type="number" class="form-input" value="5" id="cbs-test-duration">
-              </div>
-              <div class="form-group">
-                <label class="form-label">Frame Size</label>
-                <input type="number" class="form-input" value="1500" id="cbs-frame-size">
-              </div>
-            </div>
-            <div id="cbs-progress" class="progress-container" style="display:none">
-              <div class="progress-header">
-                <span>Testing...</span>
-                <span id="cbs-progress-value">0%</span>
-              </div>
-              <div class="progress-bar">
-                <div class="progress-fill" id="cbs-progress-fill"></div>
-              </div>
-            </div>
-            <button class="btn btn-primary btn-block" id="cbs-test-btn">Start Test</button>
-          </div>
-        </div>
+      <!-- CBS Config -->
+      <div id="page-cbs-config" class="page" style="display:none"></div>
 
-        <!-- Credit Monitor -->
-        <div class="card">
-          <div class="card-header">
-            <h2 class="card-title">Credit Level Monitor</h2>
-            <div class="legend">
-              <span class="legend-item"><span class="legend-color tc5"></span>TC5 (Voice)</span>
-              <span class="legend-item"><span class="legend-color tc6"></span>TC6 (Video)</span>
-            </div>
-          </div>
-          <canvas id="cbs-graph" width="900" height="280"></canvas>
-        </div>
+      <!-- Port Status -->
+      <div id="page-ports" class="page" style="display:none"></div>
 
-        <!-- Bandwidth Allocation -->
-        <div class="card">
-          <div class="card-header">
-            <h2 class="card-title">Bandwidth Allocation</h2>
-          </div>
-          <div class="bandwidth-bars" id="cbs-bandwidth-bars"></div>
-        </div>
+      <!-- Packet Capture -->
+      <div id="page-capture" class="page" style="display:none"></div>
 
-        <!-- Test Results -->
-        <div class="card" id="cbs-results" style="display:none">
-          <div class="card-header">
-            <h2 class="card-title">Test Results</h2>
-            <span class="status-badge success">Complete</span>
-          </div>
-          <div class="results-grid" id="cbs-results-grid"></div>
-        </div>
-      </div>
+      <!-- Traffic Generator -->
+      <div id="page-traffic" class="page" style="display:none"></div>
 
-      <!-- Device Status -->
-      <div id="page-devices" class="page" style="display:none">
-        <div class="page-header">
-          <h1 class="page-title">Device Status</h1>
-          <div class="header-right">
-            <span id="devices-count">3 / 3 online</span>
-            <button class="btn btn-secondary">Refresh</button>
-          </div>
-        </div>
-
-        <!-- Device Cards -->
-        <div class="device-cards" id="device-cards"></div>
-
-        <!-- Network Topology -->
-        <div class="card">
-          <div class="card-header">
-            <h2 class="card-title">Network Topology</h2>
-            <span class="card-subtitle">PTP Hierarchy</span>
-          </div>
-          <div class="topology" id="topology"></div>
-        </div>
-
-        <!-- Port Status -->
-        <div class="card">
-          <div class="card-header">
-            <h2 class="card-title">Port Status</h2>
-            <span class="card-subtitle" id="port-status-board">TSN Board #1</span>
-          </div>
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Port</th>
-                <th>Link</th>
-                <th>Speed</th>
-                <th style="text-align:right">RX Bytes</th>
-                <th style="text-align:right">TX Bytes</th>
-                <th style="text-align:right">RX Pkts</th>
-                <th style="text-align:right">TX Pkts</th>
-                <th>PTP Role</th>
-              </tr>
-            </thead>
-            <tbody id="port-status-table"></tbody>
-          </table>
-        </div>
-      </div>
+      <!-- Settings -->
+      <div id="page-settings" class="page" style="display:none"></div>
 
     </main>
   </div>

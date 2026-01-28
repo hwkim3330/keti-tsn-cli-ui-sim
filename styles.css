@@ -798,21 +798,6 @@ body {
   color: var(--text-secondary);
 }
 
-/* Simulation Badge */
-.sim-badge {
-  position: fixed;
-  top: 16px;
-  right: 16px;
-  background: var(--primary-color);
-  color: #fff;
-  padding: 6px 14px;
-  border-radius: 6px;
-  font-size: 0.7rem;
-  font-weight: 500;
-  z-index: 1000;
-  letter-spacing: 0.02em;
-}
-
 /* Canvas */
 canvas {
   width: 100%;

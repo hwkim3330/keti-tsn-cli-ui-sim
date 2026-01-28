@@ -44,6 +44,20 @@ let cbsCreditHistory = { tc5: [], tc6: [] };
 let currentPage = 'ptp';
 
 // =====================================================
+// High-DPI Canvas Support
+// =====================================================
+function setupCanvas(canvas, width, height) {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = width * dpr;
+  canvas.height = height * dpr;
+  canvas.style.width = width + 'px';
+  canvas.style.height = height + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  return { ctx, width, height, dpr };
+}
+
+// =====================================================
 // Navigation
 // =====================================================
 function initNavigation() {
@@ -207,9 +221,7 @@ function drawPTPGraph() {
   const history = offsetHistory[selectedDevice.id] || [];
   if (!canvas || history.length < 2) return;
 
-  const ctx = canvas.getContext('2d');
-  const width = canvas.width;
-  const height = canvas.height;
+  const { ctx, width, height } = setupCanvas(canvas, 900, 280);
   const padding = { top: 20, right: 20, bottom: 30, left: 50 };
 
   // Clear
@@ -220,7 +232,7 @@ function drawPTPGraph() {
   const graphHeight = height - padding.top - padding.bottom;
 
   // Grid lines
-  ctx.strokeStyle = '#eee';
+  ctx.strokeStyle = '#e2e8f0';
   ctx.lineWidth = 1;
   for (let i = 0; i <= 4; i++) {
     const y = padding.top + (graphHeight * i / 4);
@@ -232,26 +244,27 @@ function drawPTPGraph() {
 
   // Y-axis labels
   ctx.fillStyle = '#64748b';
-  ctx.font = '11px -apple-system, sans-serif';
+  ctx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif';
   ctx.textAlign = 'right';
   const maxOffset = 100;
   for (let i = 0; i <= 4; i++) {
     const y = padding.top + (graphHeight * i / 4);
     const value = maxOffset - (maxOffset * 2 * i / 4);
-    ctx.fillText(`${value.toFixed(0)}`, padding.left - 8, y + 4);
+    ctx.fillText(`${value.toFixed(0)}`, padding.left - 10, y + 4);
   }
 
   // Axis labels
   ctx.textAlign = 'center';
-  ctx.fillText('Time', width / 2, height - 5);
+  ctx.fillText('Time', width / 2, height - 8);
   ctx.save();
-  ctx.translate(12, height / 2);
+  ctx.translate(14, height / 2);
   ctx.rotate(-Math.PI / 2);
   ctx.fillText('Offset (ns)', 0, 0);
   ctx.restore();
 
   // Zero line
-  ctx.strokeStyle = '#999';
+  ctx.strokeStyle = '#94a3b8';
+  ctx.lineWidth = 1;
   ctx.setLineDash([4, 4]);
   const zeroY = padding.top + graphHeight / 2;
   ctx.beginPath();
@@ -262,7 +275,7 @@ function drawPTPGraph() {
 
   // Draw offset line
   ctx.strokeStyle = '#475569';
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = 2;
   ctx.beginPath();
 
   history.forEach((point, i) => {
@@ -284,7 +297,7 @@ function drawPTPGraph() {
 
     ctx.fillStyle = '#475569';
     ctx.beginPath();
-    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.arc(x, y, 5, 0, Math.PI * 2);
     ctx.fill();
   }
 }
@@ -454,9 +467,7 @@ function drawCBSGraph() {
   const canvas = document.getElementById('cbs-graph');
   if (!canvas) return;
 
-  const ctx = canvas.getContext('2d');
-  const width = canvas.width;
-  const height = canvas.height;
+  const { ctx, width, height } = setupCanvas(canvas, 900, 280);
   const padding = { top: 20, right: 20, bottom: 30, left: 60 };
 
   ctx.fillStyle = '#fff';
@@ -466,7 +477,7 @@ function drawCBSGraph() {
   const graphHeight = height - padding.top - padding.bottom;
 
   // Grid
-  ctx.strokeStyle = '#eee';
+  ctx.strokeStyle = '#e2e8f0';
   ctx.lineWidth = 1;
   for (let i = 0; i <= 4; i++) {
     const y = padding.top + (graphHeight * i / 4);
@@ -478,17 +489,18 @@ function drawCBSGraph() {
 
   // Y-axis labels
   ctx.fillStyle = '#64748b';
-  ctx.font = '11px -apple-system, sans-serif';
+  ctx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif';
   ctx.textAlign = 'right';
   const maxCredit = 200000;
   for (let i = 0; i <= 4; i++) {
     const y = padding.top + (graphHeight * i / 4);
     const value = maxCredit - (maxCredit * 2 * i / 4);
-    ctx.fillText(`${(value/1000).toFixed(0)}K`, padding.left - 8, y + 4);
+    ctx.fillText(`${(value/1000).toFixed(0)}K`, padding.left - 10, y + 4);
   }
 
   // Zero line
-  ctx.strokeStyle = '#999';
+  ctx.strokeStyle = '#94a3b8';
+  ctx.lineWidth = 1;
   ctx.setLineDash([4, 4]);
   const zeroY = padding.top + graphHeight / 2;
   ctx.beginPath();
@@ -500,7 +512,7 @@ function drawCBSGraph() {
   // Draw TC5 line
   if (cbsCreditHistory.tc5.length > 1) {
     ctx.strokeStyle = '#60a5fa';
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 2;
     ctx.beginPath();
     cbsCreditHistory.tc5.forEach((credit, i) => {
       const x = padding.left + (i / (cbsCreditHistory.tc5.length - 1)) * graphWidth;
@@ -515,7 +527,7 @@ function drawCBSGraph() {
   // Draw TC6 line
   if (cbsCreditHistory.tc6.length > 1) {
     ctx.strokeStyle = '#a78bfa';
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 2;
     ctx.beginPath();
     cbsCreditHistory.tc6.forEach((credit, i) => {
       const x = padding.left + (i / (cbsCreditHistory.tc6.length - 1)) * graphWidth;

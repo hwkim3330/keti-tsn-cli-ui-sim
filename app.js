@@ -12,9 +12,9 @@ const CONFIG = {
   maxFrameSize: 1522, // bytes (max ethernet frame)
   maxFrameBits: 12176, // 1522 * 8 bits
   boards: [
-    { id: 1, name: 'LAN9662 #1', device: '/dev/ttyACM0', mac: 'AA:BB:CC:DD:EE:01', ports: 12 },
-    { id: 2, name: 'LAN9662 #2', device: '/dev/ttyACM1', mac: 'AA:BB:CC:DD:EE:02', ports: 12 },
-    { id: 3, name: 'LAN9662 #3', device: '/dev/ttyACM2', mac: 'AA:BB:CC:DD:EE:03', ports: 12 },
+    { id: 1, name: 'LAN9692 #1', device: '/dev/ttyACM0', mac: 'AA:BB:CC:DD:EE:01', ports: 12 },
+    { id: 2, name: 'LAN9692 #2', device: '/dev/ttyACM1', mac: 'AA:BB:CC:DD:EE:02', ports: 12 },
+    { id: 3, name: 'LAN9692 #3', device: '/dev/ttyACM2', mac: 'AA:BB:CC:DD:EE:03', ports: 12 },
   ]
 };
 
@@ -40,14 +40,14 @@ const state = {
   cbs: {
     port: 8,
     idleSlope: {0: 1000000, 1: 500, 2: 1000, 3: 2000, 4: 5000, 5: 10000, 6: 20000, 7: 50000},
-    testRunning: true, // Auto-start
+    testRunning: false, // Start with button
     selectedTCs: [1, 2, 3, 4, 5, 6, 7],
     monitorTCs: [1, 2, 3, 4, 5, 6, 7],
     creditHistory: [],
     credit: {}, // Current credit per TC
     queueDepth: {}, // Packets waiting per TC
     pps: 10000,
-    duration: 999999 // Continuous
+    duration: 30 // 30 seconds test
   },
   traffic: {
     running: false,
@@ -687,7 +687,7 @@ function startTASTest() {
   let elapsed = 0;
 
   simIntervals.tas = setInterval(() => {
-    elapsed += 100; // 100ms intervals for smoother visualization
+    elapsed += 50; // 50ms intervals for smoother staircase effect
     if (elapsed > maxTime) {
       stopTASTest();
       return;
@@ -698,31 +698,31 @@ function startTASTest() {
 
     state.tas.selectedTCs.forEach(tc => {
       // TX: Packets are generated uniformly
-      const txPackets = Math.round((pps / state.tas.selectedTCs.length) * 0.1 * (0.8 + Math.random() * 0.4));
+      const txPackets = Math.round((pps / state.tas.selectedTCs.length) * 0.05 * (0.8 + Math.random() * 0.4));
       txEntry.tc[tc] = txPackets;
 
       if (state.tas.enabled) {
-        // IEEE 802.1Qbv TAS: Packets wait in queue until gate opens
+        // IEEE 802.1Qbv TAS: Staircase pattern - each TC transmits in its own slot
         // Accumulate incoming packets
         state.tas.rxSlotAccum[tc] = (state.tas.rxSlotAccum[tc] || 0) + txPackets;
 
-        // Find which slot this TC's gate is open in
-        const gclSlot = state.tas.gcl.findIndex(entry => (entry.gates >> tc) & 1);
+        // Each TC is assigned to slot matching its TC number (TC1->S1, TC2->S2, etc.)
+        const assignedSlot = tc;
 
         // Calculate current position in cycle
         const cyclePosition = elapsed % cycleTime;
         const currentSlot = Math.floor(cyclePosition / slotDuration);
 
-        // RX: Packets only transmitted when gate is open (in correct slot)
-        if (currentSlot === gclSlot || (gclSlot === -1 && ((state.tas.gcl[0]?.gates >> tc) & 1))) {
-          // Gate is open! Release accumulated packets
+        // RX: Packets only transmitted when in assigned slot (staircase pattern)
+        if (currentSlot === assignedSlot) {
+          // Gate is open! Release accumulated packets in burst
           const releasedPackets = state.tas.rxSlotAccum[tc];
-          // Apply guard band loss (~5%)
-          const guardBandLoss = Math.random() < 0.05 ? 1 : 0;
+          // Apply guard band loss (~3%)
+          const guardBandLoss = Math.random() < 0.03 ? 1 : 0;
           rxEntry.tc[tc] = Math.max(0, releasedPackets - guardBandLoss);
           state.tas.rxSlotAccum[tc] = 0;
         } else {
-          // Gate closed - packets wait in queue
+          // Gate closed - packets wait in queue (no RX in this time slot)
           rxEntry.tc[tc] = 0;
         }
       } else {
@@ -734,9 +734,9 @@ function startTASTest() {
     state.tas.txHistory.push(txEntry);
     state.tas.rxHistory.push(rxEntry);
 
-    // Keep last 100 entries
-    if (state.tas.txHistory.length > 100) state.tas.txHistory.shift();
-    if (state.tas.rxHistory.length > 100) state.tas.rxHistory.shift();
+    // Keep last 200 entries for better visualization
+    if (state.tas.txHistory.length > 200) state.tas.txHistory.shift();
+    if (state.tas.rxHistory.length > 200) state.tas.rxHistory.shift();
 
     if (state.currentPage === 'tas-dashboard') {
       drawTASRasterGraph('tas-tx-canvas', state.tas.txHistory, '#3b82f6');
@@ -744,7 +744,7 @@ function startTASTest() {
       // Update predicted GCL heatmap
       updatePredictedGCLHeatmap();
     }
-  }, 100);
+  }, 50);
 
   renderPage('tas-dashboard');
 }
@@ -785,7 +785,10 @@ function renderCBSDashboard(el) {
         <p class="page-description">Credit-Based Shaper (IEEE 802.1Qav) Real-Time Monitor</p>
       </div>
       <div class="header-right">
-        <span class="status-badge ${state.cbs.testRunning ? 'success' : 'neutral'}">${state.cbs.testRunning ? 'LIVE' : 'STOPPED'}</span>
+        <span class="status-badge ${state.cbs.testRunning ? 'success' : 'neutral'}">${state.cbs.testRunning ? 'RUNNING' : 'STOPPED'}</span>
+        ${state.cbs.testRunning ?
+          '<button class="btn btn-danger" onclick="stopCBSTest()">Stop Test</button>' :
+          '<button class="btn btn-primary" onclick="startCBSTest()">Start Test</button>'}
         <button class="btn btn-secondary" onclick="resetCBS()">Reset Slopes</button>
       </div>
     </div>
@@ -921,11 +924,6 @@ function renderCBSDashboard(el) {
 
   if (state.cbs.monitorTCs.length > 0) {
     drawCBSCreditGraph();
-  }
-
-  // Auto-start CBS simulation when page loads
-  if (state.cbs.testRunning && !simIntervals.cbs) {
-    runCBSSimulation();
   }
 }
 
@@ -1129,12 +1127,15 @@ function resetCBS() {
 
 function startCBSTest() {
   state.cbs.testRunning = true;
-  simulateCBS();
+  state.cbs.creditHistory = [];
+  runCBSSimulation();
+  renderPage('cbs-dashboard');
 }
 
 function stopCBSTest() {
   state.cbs.testRunning = false;
   clearInterval(simIntervals.cbs);
+  simIntervals.cbs = null;
   renderPage('cbs-dashboard');
 }
 
@@ -1143,8 +1144,8 @@ function runCBSSimulation() {
   // References: IEEE 802.1Q-2014 Section 8.6.8.2, Annex L
 
   clearInterval(simIntervals.cbs);
-  state.cbs.creditHistory = [];
   const pps = state.cbs.pps;
+  const duration = state.cbs.duration * 1000; // Convert to ms
   const intervalMs = 50; // 50ms update interval
   let simTime = 0;
 
@@ -1162,6 +1163,12 @@ function runCBSSimulation() {
 
   simIntervals.cbs = setInterval(() => {
     simTime += intervalMs;
+
+    // Stop after duration
+    if (simTime > duration) {
+      stopCBSTest();
+      return;
+    }
 
     state.cbs.monitorTCs.forEach(tc => {
       // IEEE 802.1Qav parameters
@@ -1837,10 +1844,4 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Auto-start CBS simulation for realistic monitoring
-  setTimeout(() => {
-    if (state.cbs.testRunning) {
-      runCBSSimulation();
-    }
-  }, 500);
 });

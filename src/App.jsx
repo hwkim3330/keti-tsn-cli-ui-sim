@@ -59,9 +59,18 @@ function App() {
             </div>
           </div>
 
-          <div style={{ padding: '16px', borderTop: '1px solid rgba(255,255,255,0.1)', fontSize: '0.7rem', color: '#64748b' }}>
-            <div>KETI TSN Demo</div>
-            <div style={{ marginTop: '4px' }}>v1.0.0 Simulation</div>
+          <div style={{ padding: '16px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+              <svg width="32" height="32" viewBox="0 0 100 100" fill="none">
+                <rect width="100" height="100" rx="8" fill="#0066B3"/>
+                <text x="50" y="65" textAnchor="middle" fill="white" fontSize="36" fontWeight="bold" fontFamily="Arial, sans-serif">K</text>
+              </svg>
+              <div>
+                <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#fff' }}>KETI</div>
+                <div style={{ fontSize: '0.6rem', color: '#888' }}>전자부품연구원</div>
+              </div>
+            </div>
+            <div style={{ fontSize: '0.65rem', color: '#64748b' }}>TSN Simulation v1.0.0</div>
           </div>
         </nav>
 

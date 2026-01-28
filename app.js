@@ -2,11 +2,10 @@
 // TSN Simulation Dashboard - Vanilla JS
 // =====================================================
 
-// Device Configuration
+// Device Configuration - 2 Boards
 const devices = [
   { id: 'board-1', name: 'TSN Board #1', type: 'LAN9692', mac: 'E6:F4:41:C9:57:01', ip: '192.168.1.101', ports: 9, role: 'GM (Grandmaster)', roleShort: 'GM', status: 'online', uptime: 86400 + Math.floor(Math.random() * 3600) },
-  { id: 'board-2', name: 'TSN Board #2', type: 'LAN9692', mac: 'FA:AE:C9:26:A4:02', ip: '192.168.1.102', ports: 9, role: 'BC (Boundary Clock)', roleShort: 'BC', status: 'online', uptime: 43200 + Math.floor(Math.random() * 3600) },
-  { id: 'board-3', name: 'TSN Board #3', type: 'LAN9692', mac: 'AA:BB:CC:DD:EE:03', ip: '192.168.1.103', ports: 9, role: 'Slave', roleShort: 'Slave', status: 'online', uptime: 21600 + Math.floor(Math.random() * 3600) },
+  { id: 'board-2', name: 'TSN Board #2', type: 'LAN9692', mac: 'FA:AE:C9:26:A4:02', ip: '192.168.1.102', ports: 9, role: 'Slave', roleShort: 'Slave', status: 'online', uptime: 43200 + Math.floor(Math.random() * 3600) },
 ];
 
 // Traffic Class Names
@@ -125,22 +124,22 @@ function renderBoardSelectors() {
 // =====================================================
 function generatePTPData(device, prevOffset = 0) {
   const isGM = device.roleShort === 'GM';
-  const isBC = device.roleShort === 'BC';
 
-  const baseJitter = isGM ? 0 : isBC ? 5 : 15;
+  // Realistic PTP offset simulation - typically within ±50ns when synchronized
+  const baseJitter = isGM ? 0 : 8;
   const drift = (Math.random() - 0.5) * baseJitter;
 
-  let newOffset = isGM ? 0 : prevOffset * 0.95 + drift;
-  newOffset = Math.max(-100, Math.min(100, newOffset));
+  let newOffset = isGM ? 0 : prevOffset * 0.92 + drift;
+  newOffset = Math.max(-50, Math.min(50, newOffset));
 
   return {
     offset: newOffset,
-    meanPathDelay: isGM ? 0 : 4500 + Math.random() * 1000,
-    clockClass: isGM ? 6 : isBC ? 7 : 248,
-    clockAccuracy: isGM ? 0x21 : isBC ? 0x22 : 0x25,
+    meanPathDelay: isGM ? 0 : 5200 + Math.random() * 300,
+    clockClass: isGM ? 6 : 248,
+    clockAccuracy: isGM ? 0x21 : 0x25,
     priority1: isGM ? 128 : 255,
     priority2: isGM ? 128 : 255,
-    stepsRemoved: isGM ? 0 : isBC ? 1 : 2,
+    stepsRemoved: isGM ? 0 : 1,
     portState: isGM ? 'MASTER' : 'SLAVE',
     gmIdentity: 'E6:F4:41:FF:FE:C9:57:01',
   };
@@ -246,7 +245,7 @@ function drawPTPGraph() {
   ctx.fillStyle = '#64748b';
   ctx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif';
   ctx.textAlign = 'right';
-  const maxOffset = 100;
+  const maxOffset = 50;
   for (let i = 0; i <= 4; i++) {
     const y = padding.top + (graphHeight * i / 4);
     const value = maxOffset - (maxOffset * 2 * i / 4);
@@ -327,12 +326,12 @@ function renderTASDashboard() {
     const slots = DEFAULT_GCL.map((entry, slotIdx) => {
       const isOpen = (entry.gateStates >> tc) & 1;
       const widthPercent = (entry.timeInterval / 1000000000) * 100;
-      const colors = ['#9ca3af', '#fb923c', '#fbbf24', '#4ade80', '#22d3ee', '#60a5fa', '#a78bfa', '#f472b6'];
+      const colors = ['#94a3b8', '#d4a574', '#c9b458', '#6bb38a', '#5aafb8', '#7393b3', '#9683a9', '#b8849a'];
       return `<div class="timeline-slot" style="width:${widthPercent}%;background:${isOpen ? colors[tc] : '#f5f5f5'};opacity:${isOpen ? 0.8 : 0.3}"></div>`;
     }).join('');
     return `
       <div class="timeline-row">
-        <div class="timeline-label" style="color:${['#9ca3af', '#fb923c', '#fbbf24', '#4ade80', '#22d3ee', '#60a5fa', '#a78bfa', '#f472b6'][tc]}">TC${tc}</div>
+        <div class="timeline-label" style="color:${['#94a3b8', '#d4a574', '#c9b458', '#6bb38a', '#5aafb8', '#7393b3', '#9683a9', '#b8849a'][tc]}">TC${tc}</div>
         <div class="timeline-bar">${slots}</div>
         <div class="timeline-name">${tcNames[tc]}</div>
       </div>
@@ -391,7 +390,7 @@ function showTASResults() {
     });
   }
 
-  const colors = ['#9ca3af', '#fb923c', '#fbbf24', '#4ade80', '#22d3ee', '#60a5fa', '#a78bfa', '#f472b6'];
+  const colors = ['#94a3b8', '#d4a574', '#c9b458', '#6bb38a', '#5aafb8', '#7393b3', '#9683a9', '#b8849a'];
 
   tableBody.innerHTML = data.map(d => {
     const isShaped = d.avgLatency > 10;
@@ -434,8 +433,8 @@ function renderCBSDashboard() {
   // Bandwidth bars
   const bwBars = document.getElementById('cbs-bandwidth-bars');
   const bwData = [
-    { label: 'TC5 (Voice)', percent: 25, color: '#60a5fa' },
-    { label: 'TC6 (Video)', percent: 37.5, color: '#a78bfa' },
+    { label: 'TC5 (Voice)', percent: 25, color: '#7393b3' },
+    { label: 'TC6 (Video)', percent: 37.5, color: '#9683a9' },
     { label: 'Best Effort', percent: 37.5, color: '#9ca3af' },
   ];
   bwBars.innerHTML = bwData.map(d => `
@@ -511,7 +510,7 @@ function drawCBSGraph() {
 
   // Draw TC5 line
   if (cbsCreditHistory.tc5.length > 1) {
-    ctx.strokeStyle = '#60a5fa';
+    ctx.strokeStyle = '#7393b3';
     ctx.lineWidth = 2;
     ctx.beginPath();
     cbsCreditHistory.tc5.forEach((credit, i) => {
@@ -526,7 +525,7 @@ function drawCBSGraph() {
 
   // Draw TC6 line
   if (cbsCreditHistory.tc6.length > 1) {
-    ctx.strokeStyle = '#a78bfa';
+    ctx.strokeStyle = '#9683a9';
     ctx.lineWidth = 2;
     ctx.beginPath();
     cbsCreditHistory.tc6.forEach((credit, i) => {

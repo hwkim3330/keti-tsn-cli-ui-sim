@@ -5,19 +5,20 @@
 }
 
 :root {
-  --primary-color: #475569;
-  --primary-hover: #334155;
-  --success-color: #059669;
-  --error-color: #b91c1c;
-  --warning-color: #d97706;
-  --bg-color: #f1f5f9;
+  --primary-color: #64748b;
+  --primary-hover: #475569;
+  --success-color: #22c55e;
+  --success-muted: #86efac;
+  --error-color: #ef4444;
+  --warning-color: #f59e0b;
+  --bg-color: #f8fafc;
   --sidebar-bg: #1e293b;
-  --sidebar-text: #64748b;
-  --sidebar-active: #94a3b8;
+  --sidebar-text: #94a3b8;
+  --sidebar-active: #cbd5e1;
   --card-bg: #ffffff;
   --border-color: #e2e8f0;
-  --text-primary: #334155;
-  --text-secondary: #64748b;
+  --text-primary: #475569;
+  --text-secondary: #94a3b8;
 }
 
 body {
@@ -224,23 +225,23 @@ body {
 }
 
 .status-badge.success {
-  background-color: #dcfce7;
-  color: #166534;
+  background-color: #e8f5e9;
+  color: #2e7d32;
 }
 
 .status-badge.error {
-  background-color: #fee2e2;
-  color: #991b1b;
+  background-color: #ffebee;
+  color: #c62828;
 }
 
 .status-badge.warning {
-  background-color: #fef3c7;
-  color: #92400e;
+  background-color: #fff8e1;
+  color: #f57f17;
 }
 
 .status-badge.info {
-  background-color: #dbeafe;
-  color: #1e40af;
+  background-color: #e3f2fd;
+  color: #1565c0;
 }
 
 /* Buttons */
@@ -464,14 +465,14 @@ body {
   font-weight: 600;
 }
 
-.tc0, .tc-header.tc0 { background: #9ca3af; }
-.tc1, .tc-header.tc1 { background: #fb923c; }
-.tc2, .tc-header.tc2 { background: #fbbf24; }
-.tc3, .tc-header.tc3 { background: #4ade80; }
-.tc4, .tc-header.tc4 { background: #22d3ee; }
-.tc5, .tc-header.tc5 { background: #60a5fa; }
-.tc6, .tc-header.tc6 { background: #a78bfa; }
-.tc7, .tc-header.tc7 { background: #f472b6; }
+.tc0, .tc-header.tc0 { background: #94a3b8; }
+.tc1, .tc-header.tc1 { background: #d4a574; }
+.tc2, .tc-header.tc2 { background: #c9b458; }
+.tc3, .tc-header.tc3 { background: #6bb38a; }
+.tc4, .tc-header.tc4 { background: #5aafb8; }
+.tc5, .tc-header.tc5 { background: #7393b3; }
+.tc6, .tc-header.tc6 { background: #9683a9; }
+.tc7, .tc-header.tc7 { background: #b8849a; }
 
 /* GCL Table */
 .gcl-table td {

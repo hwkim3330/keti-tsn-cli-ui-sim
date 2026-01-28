@@ -6,7 +6,11 @@ const CONFIG = {
   tcColors: ['#94a3b8', '#64748b', '#475569', '#334155', '#1e3a5f', '#1e40af', '#3730a3', '#4c1d95'],
   tcColorsBright: ['#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899'],
   linkSpeed: 1000000, // 1 Gbps in kbps
+  linkSpeedBits: 1000000000, // 1 Gbps in bits
   packetSize: 64, // bytes
+  packetBits: 512, // 64 * 8 bits
+  maxFrameSize: 1522, // bytes (max ethernet frame)
+  maxFrameBits: 12176, // 1522 * 8 bits
   boards: [
     { id: 1, name: 'LAN9662 #1', device: '/dev/ttyACM0', mac: 'AA:BB:CC:DD:EE:01', ports: 12 },
     { id: 2, name: 'LAN9662 #2', device: '/dev/ttyACM1', mac: 'AA:BB:CC:DD:EE:02', ports: 12 },
@@ -36,12 +40,14 @@ const state = {
   cbs: {
     port: 8,
     idleSlope: {0: 1000000, 1: 500, 2: 1000, 3: 2000, 4: 5000, 5: 10000, 6: 20000, 7: 50000},
-    testRunning: false,
-    selectedTCs: [1, 2, 3],
-    monitorTCs: [1, 2, 3],
+    testRunning: true, // Auto-start
+    selectedTCs: [1, 2, 3, 4, 5, 6, 7],
+    monitorTCs: [1, 2, 3, 4, 5, 6, 7],
     creditHistory: [],
-    pps: 5000,
-    duration: 5
+    credit: {}, // Current credit per TC
+    queueDepth: {}, // Packets waiting per TC
+    pps: 10000,
+    duration: 999999 // Continuous
   },
   traffic: {
     running: false,
@@ -402,10 +408,12 @@ function renderTASDashboard(el) {
       </div>
       <div class="card">
         <div class="card-header">
-          <span class="card-title">Predicted GCL (Analysis)</span>
-          <span class="status-badge ${state.tas.rxHistory.length > 0 ? 'success' : 'neutral'}">${state.tas.rxHistory.length > 0 ? 'ANALYZED' : 'WAITING'}</span>
+          <span class="card-title">Observed RX Traffic (Analysis)</span>
+          <span class="status-badge ${state.tas.rxHistory.length > 0 ? 'success' : 'neutral'}">${state.tas.rxHistory.length > 0 ? 'LIVE' : 'WAITING'}</span>
         </div>
-        ${state.tas.rxHistory.length > 0 ? renderPredictedGCL() : '<div style="padding:40px;text-align:center;color:#94a3b8">Run traffic test to analyze</div>'}
+        <div id="predicted-gcl-container">
+          ${state.tas.rxHistory.length > 0 ? renderPredictedGCL() : '<div style="padding:40px;text-align:center;color:#94a3b8">Run traffic test to see slot-based analysis</div>'}
+        </div>
       </div>
     </div>
 
@@ -478,6 +486,35 @@ function renderGCLHeatmap(gcl, isConfig) {
 }
 
 function renderPredictedGCL() {
+  // Calculate actual RX packets per slot from history
+  const slotData = {};
+  for (let slot = 0; slot < 8; slot++) {
+    slotData[slot] = {};
+    for (let tc = 0; tc < 8; tc++) {
+      slotData[slot][tc] = 0;
+    }
+  }
+
+  // Aggregate RX packets by slot (based on when they were received)
+  const cycleTime = state.tas.cycleTime;
+  const slotDuration = cycleTime / 8;
+  state.tas.rxHistory.forEach(entry => {
+    const slot = Math.floor((entry.time % cycleTime) / slotDuration);
+    for (let tc = 0; tc < 8; tc++) {
+      if (entry.tc[tc]) {
+        slotData[slot][tc] += entry.tc[tc];
+      }
+    }
+  });
+
+  // Find max for intensity calculation
+  let maxCount = 1;
+  for (let slot = 0; slot < 8; slot++) {
+    for (let tc = 0; tc < 8; tc++) {
+      if (slotData[slot][tc] > maxCount) maxCount = slotData[slot][tc];
+    }
+  }
+
   let html = '<div style="display:grid;grid-template-columns:50px repeat(8, 1fr);gap:2px">';
   html += '<div></div>';
   for (let tc = 0; tc < 8; tc++) {
@@ -487,13 +524,21 @@ function renderPredictedGCL() {
   for (let slot = 0; slot < 8; slot++) {
     html += `<div style="font-size:0.6rem;color:#64748b;display:flex;align-items:center;font-family:monospace">S${slot}</div>`;
     for (let tc = 0; tc < 8; tc++) {
-      const hasData = state.tas.selectedTCs.includes(tc) && slot === tc;
-      const count = hasData ? Math.floor(Math.random() * 50 + 20) : 0;
-      html += `<div class="gcl-cell" style="${hasData ? 'background:#059669;opacity:0.85;color:#fff' : 'background:#f3f4f6;border:1px solid #e2e8f0;color:#94a3b8'}">${hasData ? count : '-'}</div>`;
+      const count = slotData[slot][tc];
+      const intensity = Math.min(count / maxCount, 1);
+      const hasData = count > 0;
+      const isExpectedSlot = state.tas.gcl[slot] && ((state.tas.gcl[slot].gates >> tc) & 1);
+
+      if (hasData) {
+        const bgColor = isExpectedSlot ? '#059669' : '#d97706'; // Green if matches GCL, yellow if unexpected
+        html += `<div class="gcl-cell" style="background:${bgColor};opacity:${0.4 + intensity * 0.6};color:#fff;font-weight:600">${count}</div>`;
+      } else {
+        html += `<div class="gcl-cell" style="background:#f3f4f6;border:1px solid #e2e8f0;color:#94a3b8">-</div>`;
+      }
     }
   }
   html += '</div>';
-  html += '<div style="margin-top:8px;font-size:0.65rem;color:#64748b"><span style="color:#059669">■</span> GATED &nbsp; <span style="color:#d97706">■</span> FREE</div>';
+  html += '<div style="margin-top:8px;font-size:0.65rem;color:#64748b"><span style="color:#059669">■</span> GATED (Expected Slot) &nbsp; <span style="color:#d97706">■</span> FREE (Unexpected)</div>';
   return html;
 }
 
@@ -631,13 +676,18 @@ function startTASTest() {
   state.tas.testRunning = true;
   state.tas.txHistory = [];
   state.tas.rxHistory = [];
+  state.tas.rxSlotAccum = {}; // Accumulated packets per TC waiting for their slot
+  state.tas.selectedTCs.forEach(tc => { state.tas.rxSlotAccum[tc] = 0; });
+
   const pps = parseInt(document.getElementById('tas-pps')?.value) || 100;
   const duration = parseInt(document.getElementById('tas-duration')?.value) || 7;
   const maxTime = (duration + 2) * 1000;
+  const cycleTime = state.tas.cycleTime;
+  const slotDuration = cycleTime / 8;
   let elapsed = 0;
 
   simIntervals.tas = setInterval(() => {
-    elapsed += 500;
+    elapsed += 100; // 100ms intervals for smoother visualization
     if (elapsed > maxTime) {
       stopTASTest();
       return;
@@ -645,28 +695,65 @@ function startTASTest() {
 
     const txEntry = { time: elapsed, tc: {} };
     const rxEntry = { time: elapsed, tc: {} };
+
     state.tas.selectedTCs.forEach(tc => {
-      txEntry.tc[tc] = Math.round(pps / state.tas.selectedTCs.length * 0.5);
-      // RX is shaped if TAS enabled
+      // TX: Packets are generated uniformly
+      const txPackets = Math.round((pps / state.tas.selectedTCs.length) * 0.1 * (0.8 + Math.random() * 0.4));
+      txEntry.tc[tc] = txPackets;
+
       if (state.tas.enabled) {
-        const slot = tc % 8;
-        const slotStart = slot * (state.tas.cycleTime / 8);
-        const currentSlot = Math.floor((elapsed % state.tas.cycleTime) / (state.tas.cycleTime / 8));
-        rxEntry.tc[tc] = currentSlot === tc ? txEntry.tc[tc] : 0;
+        // IEEE 802.1Qbv TAS: Packets wait in queue until gate opens
+        // Accumulate incoming packets
+        state.tas.rxSlotAccum[tc] = (state.tas.rxSlotAccum[tc] || 0) + txPackets;
+
+        // Find which slot this TC's gate is open in
+        const gclSlot = state.tas.gcl.findIndex(entry => (entry.gates >> tc) & 1);
+
+        // Calculate current position in cycle
+        const cyclePosition = elapsed % cycleTime;
+        const currentSlot = Math.floor(cyclePosition / slotDuration);
+
+        // RX: Packets only transmitted when gate is open (in correct slot)
+        if (currentSlot === gclSlot || (gclSlot === -1 && ((state.tas.gcl[0]?.gates >> tc) & 1))) {
+          // Gate is open! Release accumulated packets
+          const releasedPackets = state.tas.rxSlotAccum[tc];
+          // Apply guard band loss (~5%)
+          const guardBandLoss = Math.random() < 0.05 ? 1 : 0;
+          rxEntry.tc[tc] = Math.max(0, releasedPackets - guardBandLoss);
+          state.tas.rxSlotAccum[tc] = 0;
+        } else {
+          // Gate closed - packets wait in queue
+          rxEntry.tc[tc] = 0;
+        }
       } else {
-        rxEntry.tc[tc] = txEntry.tc[tc];
+        // TAS disabled: all traffic passes through immediately
+        rxEntry.tc[tc] = txPackets;
       }
     });
 
     state.tas.txHistory.push(txEntry);
     state.tas.rxHistory.push(rxEntry);
+
+    // Keep last 100 entries
+    if (state.tas.txHistory.length > 100) state.tas.txHistory.shift();
+    if (state.tas.rxHistory.length > 100) state.tas.rxHistory.shift();
+
     if (state.currentPage === 'tas-dashboard') {
       drawTASRasterGraph('tas-tx-canvas', state.tas.txHistory, '#3b82f6');
       drawTASRasterGraph('tas-rx-canvas', state.tas.rxHistory, '#10b981');
+      // Update predicted GCL heatmap
+      updatePredictedGCLHeatmap();
     }
-  }, 500);
+  }, 100);
 
   renderPage('tas-dashboard');
+}
+
+function updatePredictedGCLHeatmap() {
+  const el = document.getElementById('predicted-gcl-container');
+  if (el) {
+    el.innerHTML = renderPredictedGCL();
+  }
 }
 
 function stopTASTest() {
@@ -695,12 +782,35 @@ function renderCBSDashboard(el) {
     <div class="page-header">
       <div>
         <h1 class="page-title">CBS Dashboard</h1>
-        <p class="page-description">Credit-Based Shaper (802.1Qav) Monitor</p>
+        <p class="page-description">Credit-Based Shaper (IEEE 802.1Qav) Real-Time Monitor</p>
       </div>
       <div class="header-right">
-        <button class="btn btn-secondary" onclick="refreshCBS()">Refresh</button>
-        <button class="btn btn-primary" onclick="applyCBS()">Apply</button>
-        <button class="btn btn-secondary" onclick="resetCBS()">Reset All</button>
+        <span class="status-badge ${state.cbs.testRunning ? 'success' : 'neutral'}">${state.cbs.testRunning ? 'LIVE' : 'STOPPED'}</span>
+        <button class="btn btn-secondary" onclick="resetCBS()">Reset Slopes</button>
+      </div>
+    </div>
+
+    <!-- Real-time Status Cards -->
+    <div class="card" style="margin-bottom:16px;background:linear-gradient(135deg, #1e293b 0%, #334155 100%)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <span style="color:#fff;font-weight:600;font-size:0.9rem">Real-Time Credit Status (TC1-TC7)</span>
+        <span style="color:#94a3b8;font-size:0.75rem;font-family:monospace">IEEE 802.1Qav Credit-Based Shaper</span>
+      </div>
+      <div id="cbs-status-cards" style="display:flex;gap:8px;flex-wrap:wrap">
+        ${state.cbs.monitorTCs.map(tc => {
+          const latest = state.cbs.creditHistory[state.cbs.creditHistory.length - 1];
+          const currentCredit = latest?.credit?.[tc] || 0;
+          const isShaping = currentCredit < 0;
+          return `
+            <div style="padding:12px 16px;border-radius:8px;font-family:monospace;background:${isShaping ? '#fef2f2' : '#f0fdf4'};border:3px solid ${CONFIG.tcColorsBright[tc]};min-width:120px;flex:1;max-width:140px">
+              <div style="color:${CONFIG.tcColorsBright[tc]};font-weight:700;font-size:1rem">TC${tc}</div>
+              <div style="font-size:1.1rem;font-weight:700;color:${isShaping ? '#dc2626' : '#334155'};margin-top:4px">${Math.round(currentCredit)} bits</div>
+              <div style="font-size:0.7rem;color:#64748b;margin-top:2px">Queue: 0 pkts</div>
+              <div style="font-size:0.7rem;color:#64748b">Slope: ${(state.cbs.idleSlope[tc]/1000).toFixed(0)}Mbps</div>
+              <div style="font-size:0.75rem;margin-top:4px;font-weight:600;color:${isShaping ? '#dc2626' : '#059669'}">${isShaping ? 'SHAPING' : 'OK'}</div>
+            </div>
+          `;
+        }).join('')}
       </div>
     </div>
 
@@ -708,20 +818,14 @@ function renderCBSDashboard(el) {
     <div class="grid-4" style="margin-bottom:24px">
       ${[
         { label: 'Board', value: CONFIG.boards[0].name, sub: CONFIG.boards[0].device },
-        { label: 'CBS Port', type: 'select' },
-        { label: 'TX Interface', value: 'enx00e04c681336' },
-        { label: 'RX Interface', value: 'enxc84d44231cc2', sub: 'Ready', ok: true }
+        { label: 'CBS Port', value: 'Port ' + state.cbs.port },
+        { label: 'Traffic Rate', value: formatBw(state.cbs.pps * CONFIG.packetSize * 8 / 1000), sub: state.cbs.pps + ' pps' },
+        { label: 'Status', value: state.cbs.testRunning ? 'Monitoring' : 'Stopped', ok: state.cbs.testRunning }
       ].map((item, i) => `
         <div class="card" style="margin-bottom:0">
           <div class="stat-label">${item.label}</div>
-          ${item.type === 'select' ? `
-            <select class="form-select" id="cbs-port" style="margin-top:4px">
-              ${[1,2,3,4,5,6,7,8,9,10,11,12].map(p => `<option value="${p}" ${p === state.cbs.port ? 'selected' : ''}>Port ${p}</option>`).join('')}
-            </select>
-          ` : `
-            <div class="stat-value" style="margin-top:4px">${item.value}</div>
-            ${item.sub ? `<div style="font-size:0.75rem;color:${item.ok ? '#059669' : '#64748b'};margin-top:4px">${item.sub}</div>` : ''}
-          `}
+          <div class="stat-value" style="margin-top:4px;color:${item.ok ? '#059669' : '#334155'}">${item.value}</div>
+          ${item.sub ? `<div style="font-size:0.75rem;color:#64748b;margin-top:4px">${item.sub}</div>` : ''}
         </div>
       `).join('')}
     </div>
@@ -765,86 +869,63 @@ function renderCBSDashboard(el) {
       </table>
     </div>
 
-    <!-- Traffic Test -->
+    <!-- Credit Graph -->
     <div class="card">
       <div class="card-header">
-        <span class="card-title">Traffic Test</span>
+        <div>
+          <span class="card-title">Credit Time-Series Graph</span>
+          <div style="font-size:0.75rem;color:#64748b;margin-top:4px">Y-axis: Credit (bits) | X-axis: Time (ms) | <span style="color:#dc2626;font-weight:600">Red Zone = Shaping (Credit &lt; 0)</span></div>
+        </div>
         <div style="display:flex;gap:8px">
-          ${state.cbs.testRunning ?
-            '<button class="btn btn-danger" onclick="stopCBSTest()">Stop</button>' :
-            '<button class="btn btn-primary" onclick="startCBSTest()">Start Test</button>'}
-          <button class="btn btn-secondary" onclick="simulateCBS()">Simulate</button>
-          <button class="btn btn-secondary" onclick="clearCBS()">Clear</button>
+          <button class="btn btn-secondary" onclick="clearCBS()">Clear Graph</button>
         </div>
       </div>
+      <canvas id="cbs-credit-canvas" height="400" style="margin-top:12px"></canvas>
+    </div>
 
-      <!-- TC Selection -->
+    <!-- Traffic TC Selection -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Traffic Generator Settings</span>
+      </div>
       <div class="section">
-        <div class="section-title">Traffic TC Selection</div>
+        <div class="section-title">Send Traffic to TCs (simulated incoming packets)</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
-          ${[0,1,2,3,4,5,6,7].map(tc => `
+          ${[1,2,3,4,5,6,7].map(tc => `
             <button class="tc-btn tc${tc} ${state.cbs.selectedTCs.includes(tc) ? 'active' : ''}"
-              onclick="toggleCBSTc('selected', ${tc})" ${state.cbs.testRunning ? 'disabled' : ''}>TC${tc}</button>
+              onclick="toggleCBSTc('selected', ${tc}); runCBSSimulation()">TC${tc}</button>
           `).join('')}
         </div>
-      </div>
-
-      <div class="section">
-        <div class="section-title">Credit Monitor TC Selection</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
-          ${[0,1,2,3,4,5,6,7].map(tc => `
-            <button class="tc-btn tc${tc} ${state.cbs.monitorTCs.includes(tc) ? 'active' : ''}"
-              onclick="toggleCBSTc('monitor', ${tc})">TC${tc}</button>
-          `).join('')}
+        <div style="font-size:0.75rem;color:#64748b;margin-top:8px">
+          Selected TCs receive simulated traffic at ${Math.round(state.cbs.pps / state.cbs.selectedTCs.length)} pps each (total ${state.cbs.pps} pps)
         </div>
       </div>
 
-      <!-- Parameters -->
-      <div class="form-row" style="margin-bottom:16px">
+      <div class="form-row" style="margin-top:16px">
         <div>
-          <label class="form-label">VLAN ID</label>
-          <input type="number" class="form-input" value="100" id="cbs-vlan">
+          <label class="form-label">Total PPS</label>
+          <input type="number" class="form-input" value="${state.cbs.pps}" id="cbs-pps"
+            onchange="state.cbs.pps = parseInt(this.value) || 5000; runCBSSimulation()">
         </div>
         <div>
-          <label class="form-label">PPS (Total)</label>
-          <input type="number" class="form-input" value="${state.cbs.pps}" id="cbs-pps" onchange="state.cbs.pps = parseInt(this.value) || 5000; renderPage('cbs-dashboard')">
+          <label class="form-label">Traffic per TC</label>
+          <div class="stat-box"><div class="stat-value">${Math.round(state.cbs.pps / state.cbs.selectedTCs.length)} pps</div></div>
         </div>
         <div>
-          <label class="form-label">Duration (s)</label>
-          <input type="number" class="form-input" value="${state.cbs.duration}" id="cbs-duration">
+          <label class="form-label">Bandwidth per TC</label>
+          <div class="stat-box"><div class="stat-value">${formatBw(state.cbs.pps / state.cbs.selectedTCs.length * CONFIG.packetSize * 8 / 1000)}</div></div>
         </div>
       </div>
-
-      <!-- Credit Graph -->
-      ${state.cbs.monitorTCs.length > 0 ? `
-        <div class="section">
-          <div class="section-title">TC Credit Graph</div>
-          <div class="section-desc">Y-axis: Credit (bits) | X-axis: Time (ms) | <span style="color:#dc2626;font-weight:600">Red Zone: Shaping (Credit < 0)</span></div>
-          <canvas id="cbs-credit-canvas" height="350" style="margin-top:12px"></canvas>
-
-          <!-- Credit Cards -->
-          ${state.cbs.creditHistory.length > 0 ? `
-            <div style="display:flex;gap:12px;margin-top:16px;flex-wrap:wrap">
-              ${state.cbs.monitorTCs.map(tc => {
-                const latest = state.cbs.creditHistory[state.cbs.creditHistory.length - 1]?.credit?.[tc] || 0;
-                const isShaping = latest < 0;
-                return `
-                  <div style="padding:12px 16px;border-radius:8px;font-family:monospace;background:${isShaping ? '#fef2f2' : '#f0fdf4'};border:3px solid ${CONFIG.tcColorsBright[tc]};min-width:140px">
-                    <div style="color:${CONFIG.tcColorsBright[tc]};font-weight:700;font-size:1rem">TC${tc}</div>
-                    <div style="font-size:1.2rem;font-weight:700;color:${isShaping ? '#dc2626' : '#334155'};margin-top:4px">${Math.round(latest)} bits</div>
-                    <div style="font-size:0.75rem;margin-top:4px;font-weight:600;color:${isShaping ? '#dc2626' : '#059669'}">${isShaping ? 'SHAPING' : 'OK'}</div>
-                  </div>
-                `;
-              }).join('')}
-            </div>
-          ` : ''}
-        </div>
-      ` : ''}
     </div>
   `;
 
   if (state.cbs.monitorTCs.length > 0) {
     drawCBSCreditGraph();
+  }
+
+  // Auto-start CBS simulation when page loads
+  if (state.cbs.testRunning && !simIntervals.cbs) {
+    runCBSSimulation();
   }
 }
 
@@ -853,8 +934,8 @@ function drawCBSCreditGraph() {
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
   const w = canvas.width = canvas.offsetWidth;
-  const h = canvas.height = 350;
-  const pad = { top: 40, right: 120, bottom: 50, left: 80 };
+  const h = canvas.height = 400;
+  const pad = { top: 40, right: 140, bottom: 50, left: 80 };
   const chartW = w - pad.left - pad.right;
   const chartH = h - pad.top - pad.bottom;
 
@@ -865,7 +946,7 @@ function drawCBSCreditGraph() {
     ctx.fillStyle = '#94a3b8';
     ctx.font = '14px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('Run test or simulation to see data', w/2, h/2);
+    ctx.fillText('Waiting for data... CBS simulation starting', w/2, h/2);
     return;
   }
 
@@ -1057,50 +1138,144 @@ function stopCBSTest() {
   renderPage('cbs-dashboard');
 }
 
-function simulateCBS() {
+function runCBSSimulation() {
+  // IEEE 802.1Qav Credit-Based Shaper Simulation
+  // References: IEEE 802.1Q-2014 Section 8.6.8.2, Annex L
+
   clearInterval(simIntervals.cbs);
   state.cbs.creditHistory = [];
   const pps = state.cbs.pps;
-  const duration = state.cbs.duration * 1000;
-  const intervalMs = 20;
+  const intervalMs = 50; // 50ms update interval
   let simTime = 0;
 
+  // Initialize credit and queue for all TCs
   const credit = {};
-  state.cbs.monitorTCs.forEach(tc => { credit[tc] = 0; });
-  state.cbs.creditHistory.push({ time: 0, credit: { ...credit } });
+  const queueDepth = {}; // Packets waiting in queue
+  const packetsSent = {}; // Track packets sent per interval
+
+  state.cbs.monitorTCs.forEach(tc => {
+    credit[tc] = 0;
+    queueDepth[tc] = 0;
+    packetsSent[tc] = 0;
+  });
+  state.cbs.creditHistory.push({ time: 0, credit: { ...credit }, queue: { ...queueDepth } });
 
   simIntervals.cbs = setInterval(() => {
     simTime += intervalMs;
-    if (simTime > duration) {
-      stopCBSTest();
-      return;
-    }
 
     state.cbs.monitorTCs.forEach(tc => {
-      const slope = state.cbs.idleSlope[tc] || CONFIG.linkSpeed;
+      // IEEE 802.1Qav parameters
+      const idleSlopeKbps = state.cbs.idleSlope[tc] || CONFIG.linkSpeed;
+      const portRateKbps = CONFIG.linkSpeed; // 1 Gbps
+
+      // sendSlope = idleSlope - portTransmitRate (always negative)
+      const sendSlopeKbps = idleSlopeKbps - portRateKbps;
+
+      // hiCredit = maxInterferenceSize * (idleSlope / portRate)
+      // loCredit = maxFrameSize * (sendSlope / portRate)
+      const hiCredit = CONFIG.maxFrameBits * (idleSlopeKbps / portRateKbps);
+      const loCredit = CONFIG.maxFrameBits * (sendSlopeKbps / portRateKbps);
+
+      // Traffic generation with burstiness
       const isTrafficTC = state.cbs.selectedTCs.includes(tc);
-      const ppsPerTc = isTrafficTC ? pps / state.cbs.selectedTCs.length : 0;
-      const packetsInInterval = ppsPerTc * intervalMs / 1000;
+      const basePpsPerTc = isTrafficTC ? pps / state.cbs.selectedTCs.length : 0;
 
-      // Credit calculation
-      const idleRecoveryBits = (slope * intervalMs) / 1000;
-      const txCostBits = packetsInInterval * CONFIG.packetSize * 8 * (1 - slope / CONFIG.linkSpeed);
+      // Add realistic burst pattern
+      const burstFactor = 0.5 + Math.random() * 1.5; // 50% to 200% of base rate
+      const packetsArriving = Math.round(basePpsPerTc * (intervalMs / 1000) * burstFactor);
 
-      let c = credit[tc] + idleRecoveryBits - txCostBits;
-      const hiCredit = CONFIG.packetSize * 8 * 2;
-      const loCredit = -CONFIG.packetSize * 8 * 10;
-      credit[tc] = Math.max(loCredit, Math.min(hiCredit, c));
+      // Add arriving packets to queue
+      queueDepth[tc] += packetsArriving;
+
+      // Credit calculation based on IEEE 802.1Qav
+      let currentCredit = credit[tc];
+      let sentThisInterval = 0;
+
+      if (queueDepth[tc] > 0) {
+        // We have packets to send
+        if (currentCredit >= 0) {
+          // Credit positive: can transmit
+          // While we have credit and packets, send packets
+          while (queueDepth[tc] > 0 && currentCredit >= -CONFIG.packetBits) {
+            // Transmit one packet: credit decreases by packet size
+            currentCredit -= CONFIG.packetBits;
+            queueDepth[tc]--;
+            sentThisInterval++;
+
+            // Apply sendSlope recovery during transmission
+            // (simplified: add partial recovery per packet)
+            currentCredit += (idleSlopeKbps * CONFIG.packetBits / portRateKbps);
+          }
+
+          // If still have packets but credit depleted, accumulate idle slope
+          if (queueDepth[tc] > 0) {
+            // Shaping: waiting for credit to recover
+            currentCredit += (idleSlopeKbps * intervalMs) / 1000;
+          }
+        } else {
+          // Credit negative: shaping in effect, accumulate credit
+          currentCredit += (idleSlopeKbps * intervalMs) / 1000;
+        }
+      } else {
+        // No packets waiting
+        // Credit can accumulate up to hiCredit, or stays at 0 if already positive
+        if (currentCredit < 0) {
+          // Recovering from negative credit
+          currentCredit += (idleSlopeKbps * intervalMs) / 1000;
+        }
+        // Credit doesn't accumulate above 0 when idle (IEEE 802.1Qav)
+        if (currentCredit > 0) currentCredit = 0;
+      }
+
+      // Clamp to hi/lo credit bounds
+      credit[tc] = Math.max(loCredit, Math.min(hiCredit, currentCredit));
+      packetsSent[tc] = sentThisInterval;
     });
 
-    state.cbs.creditHistory.push({ time: simTime, credit: { ...credit } });
-    if (state.cbs.creditHistory.length > 300) state.cbs.creditHistory.shift();
+    state.cbs.creditHistory.push({
+      time: simTime,
+      credit: { ...credit },
+      queue: { ...queueDepth },
+      sent: { ...packetsSent }
+    });
+
+    // Keep last 200 entries (10 seconds at 50ms intervals)
+    if (state.cbs.creditHistory.length > 200) state.cbs.creditHistory.shift();
 
     if (state.currentPage === 'cbs-dashboard') {
       drawCBSCreditGraph();
+      updateCBSStatusCards();
     }
   }, intervalMs);
+}
 
-  renderPage('cbs-dashboard');
+function updateCBSStatusCards() {
+  const container = document.getElementById('cbs-status-cards');
+  if (!container || state.cbs.creditHistory.length === 0) return;
+
+  const latest = state.cbs.creditHistory[state.cbs.creditHistory.length - 1];
+
+  container.innerHTML = state.cbs.monitorTCs.map(tc => {
+    const currentCredit = latest.credit?.[tc] || 0;
+    const queuedPackets = latest.queue?.[tc] || 0;
+    const isShaping = currentCredit < 0;
+    const idleSlope = state.cbs.idleSlope[tc];
+
+    return `
+      <div style="padding:12px 16px;border-radius:8px;font-family:monospace;background:${isShaping ? '#fef2f2' : '#f0fdf4'};border:3px solid ${CONFIG.tcColorsBright[tc]};min-width:120px;flex:1;max-width:140px">
+        <div style="color:${CONFIG.tcColorsBright[tc]};font-weight:700;font-size:1rem">TC${tc}</div>
+        <div style="font-size:1.1rem;font-weight:700;color:${isShaping ? '#dc2626' : '#334155'};margin-top:4px">${Math.round(currentCredit)} bits</div>
+        <div style="font-size:0.7rem;color:#64748b;margin-top:2px">Queue: ${queuedPackets} pkts</div>
+        <div style="font-size:0.7rem;color:#64748b">Slope: ${(idleSlope/1000).toFixed(0)}Mbps</div>
+        <div style="font-size:0.75rem;margin-top:4px;font-weight:600;color:${isShaping ? '#dc2626' : '#059669'}">${isShaping ? 'SHAPING' : 'OK'}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+// Keep old function name for compatibility
+function simulateCBS() {
+  runCBSSimulation();
 }
 
 function clearCBS() {
@@ -1661,4 +1836,11 @@ document.addEventListener('DOMContentLoaded', () => {
       if (total) total.textContent = pps * state.tas.selectedTCs.length;
     }
   });
+
+  // Auto-start CBS simulation for realistic monitoring
+  setTimeout(() => {
+    if (state.cbs.testRunning) {
+      runCBSSimulation();
+    }
+  }, 500);
 });

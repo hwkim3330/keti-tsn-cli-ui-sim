@@ -876,20 +876,20 @@ function renderCBSDashboard(el) {
       <div class="card">
         <div class="card-header">
           <div>
-            <span class="card-title">TX Throughput</span>
-            <div style="font-size:0.75rem;color:#64748b;margin-top:4px">Transmitted traffic rate per TC</div>
+            <span class="card-title">TX Throughput (Target)</span>
+            <div style="font-size:0.75rem;color:#64748b;margin-top:4px">Configured target rate: ${formatBw(Math.round(state.cbs.pps / state.cbs.selectedTCs.length) * CONFIG.packetBits / 1000)}/TC</div>
           </div>
-          <span class="status-badge ${state.cbs.txHistory.length > 0 ? 'success' : 'neutral'}">${state.cbs.txHistory.length > 0 ? 'MEASURED' : 'WAITING'}</span>
+          <span class="status-badge success">TARGET</span>
         </div>
         <canvas id="cbs-tx-throughput-canvas" height="220"></canvas>
       </div>
       <div class="card">
         <div class="card-header">
           <div>
-            <span class="card-title">RX Throughput (Estimated Idle Slope)</span>
-            <div style="font-size:0.75rem;color:#64748b;margin-top:4px">Received rate = effective idle slope</div>
+            <span class="card-title">RX Throughput (Actual)</span>
+            <div style="font-size:0.75rem;color:#64748b;margin-top:4px">Received rate after CBS shaping</div>
           </div>
-          <span class="status-badge ${state.cbs.rxHistory.length > 0 ? 'success' : 'neutral'}">${state.cbs.rxHistory.length > 0 ? 'ESTIMATED' : 'WAITING'}</span>
+          <span class="status-badge ${state.cbs.rxHistory.length > 0 ? 'success' : 'neutral'}">${state.cbs.rxHistory.length > 0 ? 'MEASURED' : 'WAITING'}</span>
         </div>
         <canvas id="cbs-rx-throughput-canvas" height="220"></canvas>
       </div>
@@ -1187,21 +1187,30 @@ function drawCBSThroughputGraph(canvasId, mode) {
   const barWidth = chartW / tcs.length * 0.7;
   const barGap = chartW / tcs.length * 0.3;
 
-  const history = mode === 'tx' ? state.cbs.txHistory : state.cbs.rxHistory;
   const duration = state.cbs.duration || 10;
 
   // Calculate throughput for each TC
   const throughputs = {};
   let maxThroughput = 0;
+
+  // TX: Use TARGET rate (stable, based on PPS setting)
+  // RX: Use ACTUAL received rate (varies based on shaping)
+  const ppsPerTc = Math.round(state.cbs.pps / state.cbs.selectedTCs.length);
+  const targetRateKbps = ppsPerTc * CONFIG.packetBits / 1000; // Target TX rate
+
   tcs.forEach(tc => {
-    const total = history.reduce((s, d) => s + (d.tc[tc] || 0), 0);
-    // kbps = (packets / duration) * packet_bits / 1000
-    const kbps = (total / duration) * CONFIG.packetBits / 1000;
-    throughputs[tc] = kbps;
-    if (kbps > maxThroughput) maxThroughput = kbps;
+    if (mode === 'tx') {
+      // TX shows target/configured rate - same for all TCs (stable)
+      throughputs[tc] = state.cbs.selectedTCs.includes(tc) ? targetRateKbps : 0;
+    } else {
+      // RX shows actual received rate from history
+      const total = state.cbs.rxHistory.reduce((s, d) => s + (d.tc[tc] || 0), 0);
+      throughputs[tc] = (total / duration) * CONFIG.packetBits / 1000;
+    }
+    if (throughputs[tc] > maxThroughput) maxThroughput = throughputs[tc];
   });
 
-  // For RX, also show configured idle slope as reference line
+  // For RX, also consider configured idle slope for scale
   if (mode === 'rx') {
     tcs.forEach(tc => {
       const slope = state.cbs.idleSlope[tc] || 0;
@@ -1209,7 +1218,8 @@ function drawCBSThroughputGraph(canvasId, mode) {
     });
   }
 
-  maxThroughput = Math.max(maxThroughput * 1.2, 1000);
+  // Use same scale for both TX and RX (based on target rate)
+  maxThroughput = Math.max(targetRateKbps * 1.2, maxThroughput * 1.2, 1000);
 
   const formatBw = (kbps) => {
     if (kbps >= 1000) return (kbps / 1000).toFixed(1) + 'M';

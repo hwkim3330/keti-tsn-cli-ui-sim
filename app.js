@@ -3,8 +3,8 @@
 
 // Configuration
 const CONFIG = {
+  // Muted blue-gray tones for TC colors
   tcColors: ['#94a3b8', '#64748b', '#475569', '#334155', '#1e3a5f', '#1e40af', '#3730a3', '#4c1d95'],
-  tcColorsBright: ['#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899'],
   linkSpeed: 1000000, // 1 Gbps in kbps
   linkSpeedBits: 1000000000, // 1 Gbps in bits
   packetSize: 64, // bytes
@@ -615,7 +615,7 @@ function drawTASRasterGraph(canvasId, data, color) {
         const y = pad.top + slot * rowH;
 
         // Highlight the expected slot for this TC
-        ctx.fillStyle = CONFIG.tcColorsBright[slot] + '15';
+        ctx.fillStyle = CONFIG.tcColors[slot] + '15';
         ctx.fillRect(x1, y, x2 - x1, rowH);
       }
     }
@@ -625,13 +625,13 @@ function drawTASRasterGraph(canvasId, data, color) {
   for (let tc = 0; tc < 8; tc++) {
     const y = pad.top + tc * rowH;
     if (!isRxGraph) {
-      ctx.fillStyle = state.tas.selectedTCs.includes(tc) ? CONFIG.tcColorsBright[tc] + '08' : '#fafafa';
+      ctx.fillStyle = state.tas.selectedTCs.includes(tc) ? CONFIG.tcColors[tc] + '08' : '#fafafa';
       ctx.fillRect(pad.left, y, chartW, rowH);
     }
     ctx.strokeStyle = '#e2e8f0';
     ctx.strokeRect(pad.left, y, chartW, rowH);
 
-    ctx.fillStyle = state.tas.selectedTCs.includes(tc) ? CONFIG.tcColorsBright[tc] : '#94a3b8';
+    ctx.fillStyle = state.tas.selectedTCs.includes(tc) ? CONFIG.tcColors[tc] : '#94a3b8';
     ctx.font = '9px sans-serif';
     ctx.textAlign = 'right';
     ctx.fillText('TC' + tc, pad.left - 6, y + rowH/2 + 3);
@@ -669,12 +669,12 @@ function drawTASRasterGraph(canvasId, data, color) {
       // Draw filled circle
       ctx.beginPath();
       ctx.arc(x, yCenter, dotRadius, 0, Math.PI * 2);
-      ctx.fillStyle = CONFIG.tcColorsBright[tc];
+      ctx.fillStyle = CONFIG.tcColors[tc];
       ctx.globalAlpha = 0.7 + intensity * 0.3;
       ctx.fill();
 
       // Add border for clarity
-      ctx.strokeStyle = CONFIG.tcColorsBright[tc];
+      ctx.strokeStyle = CONFIG.tcColors[tc];
       ctx.lineWidth = 2;
       ctx.stroke();
       ctx.globalAlpha = 1;
@@ -958,7 +958,7 @@ function renderCBSIdleSlopeTable(formatBw) {
   let html = '<div style="display:grid;grid-template-columns:60px repeat(7, 1fr);gap:4px;font-size:0.75rem">';
   html += '<div style="font-weight:600;color:#64748b">TC</div>';
   for (let tc = 1; tc <= 7; tc++) {
-    html += `<div style="text-align:center;font-weight:600;color:${CONFIG.tcColorsBright[tc]}">TC${tc}</div>`;
+    html += `<div style="text-align:center;font-weight:600;color:${CONFIG.tcColors[tc]}">TC${tc}</div>`;
   }
   html += '<div style="color:#64748b">Slope</div>';
   for (let tc = 1; tc <= 7; tc++) {
@@ -973,7 +973,7 @@ function renderCBSAnalysis(formatBw) {
   let html = '<div style="display:grid;grid-template-columns:80px repeat(7, 1fr);gap:4px;font-size:0.7rem">';
   html += '<div style="font-weight:600;color:#64748b">Metric</div>';
   for (let tc = 1; tc <= 7; tc++) {
-    html += `<div style="text-align:center;font-weight:600;color:${CONFIG.tcColorsBright[tc]}">TC${tc}</div>`;
+    html += `<div style="text-align:center;font-weight:600;color:${CONFIG.tcColors[tc]}">TC${tc}</div>`;
   }
 
   // TX packets
@@ -1043,7 +1043,7 @@ function renderCBSResults(formatBw) {
             const isShaped = txTotal > 0 && (txTotal - rxTotal) / txTotal > 0.05;
             return `
               <tr>
-                <td><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${CONFIG.tcColorsBright[tc]};margin-right:6px"></span><strong>TC${tc}</strong></td>
+                <td><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${CONFIG.tcColors[tc]};margin-right:6px"></span><strong>TC${tc}</strong></td>
                 <td style="text-align:right;font-family:monospace">${txTotal}</td>
                 <td style="text-align:right;font-family:monospace;font-weight:600">${rxTotal}</td>
                 <td style="text-align:right;font-family:monospace">${formatBw(slope)}</td>
@@ -1086,13 +1086,13 @@ function drawCBSRasterGraph(canvasId, data, color) {
       // Higher shaping (lower slope) = more red tint
       ctx.fillStyle = `rgba(239, 68, 68, ${shapingLevel * 0.15})`;
     } else {
-      ctx.fillStyle = state.cbs.selectedTCs.includes(tc) ? CONFIG.tcColorsBright[tc] + '10' : '#fafafa';
+      ctx.fillStyle = state.cbs.selectedTCs.includes(tc) ? CONFIG.tcColors[tc] + '10' : '#fafafa';
     }
     ctx.fillRect(pad.left, y, chartW, rowH);
     ctx.strokeStyle = '#e2e8f0';
     ctx.strokeRect(pad.left, y, chartW, rowH);
 
-    ctx.fillStyle = state.cbs.selectedTCs.includes(tc) ? CONFIG.tcColorsBright[tc] : '#94a3b8';
+    ctx.fillStyle = state.cbs.selectedTCs.includes(tc) ? CONFIG.tcColors[tc] : '#94a3b8';
     ctx.font = '9px sans-serif';
     ctx.textAlign = 'right';
     ctx.fillText('TC' + tc, pad.left - 6, y + rowH/2 + 3);
@@ -1132,12 +1132,12 @@ function drawCBSRasterGraph(canvasId, data, color) {
       // Filled circle
       ctx.beginPath();
       ctx.arc(x, yCenter, dotRadius, 0, Math.PI * 2);
-      ctx.fillStyle = CONFIG.tcColorsBright[tc];
+      ctx.fillStyle = CONFIG.tcColors[tc];
       ctx.globalAlpha = 0.6 + intensity * 0.4;
       ctx.fill();
 
       // Border for clarity
-      ctx.strokeStyle = CONFIG.tcColorsBright[tc];
+      ctx.strokeStyle = CONFIG.tcColors[tc];
       ctx.lineWidth = 1.5;
       ctx.stroke();
       ctx.globalAlpha = 1;
@@ -1235,11 +1235,11 @@ function drawCBSSlopeGraph() {
     }
 
     const estimatedHeight = (estimatedSlope / maxSlope) * chartH;
-    ctx.fillStyle = CONFIG.tcColorsBright[tc];
+    ctx.fillStyle = CONFIG.tcColors[tc];
     ctx.fillRect(x + gap/2, pad.top + chartH - estimatedHeight, barWidth, estimatedHeight);
 
     // TC label
-    ctx.fillStyle = CONFIG.tcColorsBright[tc];
+    ctx.fillStyle = CONFIG.tcColors[tc];
     ctx.font = 'bold 11px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('TC' + tc, x, h - pad.bottom + 15);
@@ -1382,7 +1382,7 @@ function drawCBSCreditGraph() {
     }));
     if (points.length < 2) return;
 
-    ctx.strokeStyle = CONFIG.tcColorsBright[tc];
+    ctx.strokeStyle = CONFIG.tcColors[tc];
     ctx.lineWidth = 3;
     ctx.beginPath();
     points.forEach((p, i) => {
@@ -1395,7 +1395,7 @@ function drawCBSCreditGraph() {
     const last = points[points.length - 1];
     ctx.beginPath();
     ctx.arc(last.x, last.y, 6, 0, Math.PI * 2);
-    ctx.fillStyle = CONFIG.tcColorsBright[tc];
+    ctx.fillStyle = CONFIG.tcColors[tc];
     ctx.fill();
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 2;
@@ -1433,7 +1433,7 @@ function drawCBSCreditGraph() {
   ctx.fillText('Legend', w - pad.right + 20, pad.top);
   state.cbs.monitorTCs.forEach((tc, i) => {
     const y = pad.top + 20 + i * 35;
-    ctx.strokeStyle = CONFIG.tcColorsBright[tc];
+    ctx.strokeStyle = CONFIG.tcColors[tc];
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(w - pad.right + 20, y + 8);
@@ -1442,10 +1442,10 @@ function drawCBSCreditGraph() {
 
     ctx.beginPath();
     ctx.arc(w - pad.right + 50, y + 8, 5, 0, Math.PI * 2);
-    ctx.fillStyle = CONFIG.tcColorsBright[tc];
+    ctx.fillStyle = CONFIG.tcColors[tc];
     ctx.fill();
 
-    ctx.fillStyle = CONFIG.tcColorsBright[tc];
+    ctx.fillStyle = CONFIG.tcColors[tc];
     ctx.font = '11px sans-serif';
     ctx.fillText('TC' + tc, w - pad.right + 60, y + 12);
     ctx.fillStyle = '#64748b';
@@ -1785,7 +1785,7 @@ function renderCBSConfig(el) {
         <tbody>
           ${[0,1,2,3,4,5,6,7].map(tc => `
             <tr>
-              <td><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${CONFIG.tcColorsBright[tc]};margin-right:8px"></span><strong>TC${tc}</strong></td>
+              <td><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${CONFIG.tcColors[tc]};margin-right:8px"></span><strong>TC${tc}</strong></td>
               <td><input type="number" class="form-input" value="${state.cbs.idleSlope[tc]}" data-tc="${tc}" style="width:200px"></td>
               <td>
                 <select class="form-select" style="width:150px" onchange="setIdleSlopePreset(${tc}, this.value)">

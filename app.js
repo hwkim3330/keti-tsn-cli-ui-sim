@@ -662,16 +662,16 @@ function drawTASRasterGraph(canvasId, data, color) {
       if (count === 0) return;
 
       const y = pad.top + tc * rowH;
-      const intensity = Math.min(count / 20, 1);
-      const lineWidth = Math.min(1 + count * 0.1, 3);
+      const intensity = Math.min(count / 30, 1);
+      const lineWidth = Math.min(2 + count * 0.05, 4);
 
       // Draw vertical line
       ctx.beginPath();
-      ctx.moveTo(x, y + 2);
-      ctx.lineTo(x, y + rowH - 2);
+      ctx.moveTo(x, y + 1);
+      ctx.lineTo(x, y + rowH - 1);
       ctx.strokeStyle = CONFIG.tcColors[tc];
       ctx.lineWidth = lineWidth;
-      ctx.globalAlpha = 0.5 + intensity * 0.5;
+      ctx.globalAlpha = 0.7 + intensity * 0.3;
       ctx.stroke();
       ctx.globalAlpha = 1;
     });
@@ -764,8 +764,9 @@ function startTASTest() {
     state.tas.txHistory.push(txEntry);
     state.tas.rxHistory.push(rxEntry);
 
-    if (state.tas.txHistory.length > 200) state.tas.txHistory.shift();
-    if (state.tas.rxHistory.length > 200) state.tas.rxHistory.shift();
+    // Keep enough history for full visualization (9s / 30ms = 300 points)
+    if (state.tas.txHistory.length > 400) state.tas.txHistory.shift();
+    if (state.tas.rxHistory.length > 400) state.tas.rxHistory.shift();
 
     if (state.currentPage === 'tas-dashboard') {
       drawTASRasterGraph('tas-tx-canvas', state.tas.txHistory, '#3b82f6');

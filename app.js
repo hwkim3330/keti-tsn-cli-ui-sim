@@ -39,14 +39,14 @@ const state = {
   },
   cbs: {
     port: 8,
-    // Idle slopes in kbps - dramatically different to show shaping effect
-    // TC1: very low (will be heavily shaped), TC7: high (minimal shaping)
-    idleSlope: {0: 1000000, 1: 100, 2: 300, 3: 800, 4: 2000, 5: 5000, 6: 15000, 7: 50000},
+    // Idle slopes in kbps - traffic rate ~10Mbps per TC, so slopes show clear shaping
+    // TC1: 1% pass, TC2: 5%, TC3: 10%, TC4: 25%, TC5: 50%, TC6: 80%, TC7: 100%
+    idleSlope: {0: 1000000, 1: 100, 2: 500, 3: 1000, 4: 2500, 5: 5000, 6: 8000, 7: 15000},
     testRunning: false,
     selectedTCs: [1, 2, 3, 4, 5, 6, 7],
     txHistory: [],
     rxHistory: [],
-    pps: 7000,
+    pps: 140000,  // 20000 pps per TC = ~10Mbps per TC
     duration: 10
   },
   traffic: {
@@ -1117,7 +1117,7 @@ function drawCBSRasterGraph(canvasId, data, color) {
     ctx.fillText((t/1000) + 's', x, h - pad.bottom + 12);
   }
 
-  // Scatter plot - draw dots
+  // Scatter plot - draw dots with size based on packet count
   data.forEach(d => {
     const x = pad.left + (d.time / maxTime) * chartW;
     [0,1,2,3,4,5,6,7].forEach(tc => {
@@ -1125,18 +1125,25 @@ function drawCBSRasterGraph(canvasId, data, color) {
       if (count === 0) return;
 
       const yCenter = pad.top + tc * rowH + rowH / 2;
-      const dotRadius = Math.min(2 + count * 0.4, 9);
-      const intensity = Math.min(count / 20, 1);
+      // Size proportional to packet count - VERY visible difference
+      const dotRadius = Math.min(3 + count * 0.15, 10);
+      const intensity = Math.min(count / 150, 1);
 
+      // Filled circle
       ctx.beginPath();
       ctx.arc(x, yCenter, dotRadius, 0, Math.PI * 2);
       ctx.fillStyle = CONFIG.tcColorsBright[tc];
-      ctx.globalAlpha = 0.5 + intensity * 0.5;
+      ctx.globalAlpha = 0.6 + intensity * 0.4;
       ctx.fill();
+
+      // Border for clarity
+      ctx.strokeStyle = CONFIG.tcColorsBright[tc];
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
       ctx.globalAlpha = 1;
 
-      // Show count on larger dots
-      if (count >= 8 && dotRadius > 5) {
+      // Show count on dots
+      if (count >= 50 && dotRadius >= 6) {
         ctx.fillStyle = '#fff';
         ctx.font = 'bold 7px sans-serif';
         ctx.textAlign = 'center';

@@ -654,38 +654,26 @@ function drawTASRasterGraph(canvasId, data, color) {
     ctx.fillText((t/1000) + 's', x, h - pad.bottom + 12);
   }
 
-  // Scatter plot - draw dots for each packet burst
+  // Draw vertical lines for each packet burst
   data.forEach(d => {
     const x = pad.left + (d.time / maxTime) * chartW;
     [0,1,2,3,4,5,6,7].forEach(tc => {
       const count = d.tc[tc] || 0;
       if (count === 0) return;
 
-      const yCenter = pad.top + tc * rowH + rowH / 2;
-      // Larger dots for better visibility
-      const dotRadius = Math.min(4 + count * 0.5, 12);
+      const y = pad.top + tc * rowH;
       const intensity = Math.min(count / 20, 1);
+      const lineWidth = Math.min(1 + count * 0.1, 3);
 
-      // Draw filled circle
+      // Draw vertical line
       ctx.beginPath();
-      ctx.arc(x, yCenter, dotRadius, 0, Math.PI * 2);
-      ctx.fillStyle = CONFIG.tcColors[tc];
-      ctx.globalAlpha = 0.7 + intensity * 0.3;
-      ctx.fill();
-
-      // Add border for clarity
+      ctx.moveTo(x, y + 2);
+      ctx.lineTo(x, y + rowH - 2);
       ctx.strokeStyle = CONFIG.tcColors[tc];
-      ctx.lineWidth = 2;
+      ctx.lineWidth = lineWidth;
+      ctx.globalAlpha = 0.5 + intensity * 0.5;
       ctx.stroke();
       ctx.globalAlpha = 1;
-
-      // Show packet count
-      if (count >= 3 && dotRadius >= 6) {
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 8px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(count, x, yCenter + 3);
-      }
     });
   });
 
@@ -1130,38 +1118,26 @@ function drawCBSRasterGraph(canvasId, data, color) {
     ctx.fillText((t/1000) + 's', x, h - pad.bottom + 12);
   }
 
-  // Scatter plot - draw dots with size based on packet count
+  // Draw vertical lines for each packet burst
   data.forEach(d => {
     const x = pad.left + (d.time / maxTime) * chartW;
     [0,1,2,3,4,5,6,7].forEach(tc => {
       const count = d.tc[tc] || 0;
       if (count === 0) return;
 
-      const yCenter = pad.top + tc * rowH + rowH / 2;
-      // Size proportional to packet count - VERY visible difference
-      const dotRadius = Math.min(3 + count * 0.15, 10);
+      const y = pad.top + tc * rowH;
       const intensity = Math.min(count / 150, 1);
+      const lineWidth = Math.min(1 + count * 0.02, 3);
 
-      // Filled circle
+      // Draw vertical line
       ctx.beginPath();
-      ctx.arc(x, yCenter, dotRadius, 0, Math.PI * 2);
-      ctx.fillStyle = CONFIG.tcColors[tc];
-      ctx.globalAlpha = 0.6 + intensity * 0.4;
-      ctx.fill();
-
-      // Border for clarity
+      ctx.moveTo(x, y + 2);
+      ctx.lineTo(x, y + rowH - 2);
       ctx.strokeStyle = CONFIG.tcColors[tc];
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = lineWidth;
+      ctx.globalAlpha = 0.4 + intensity * 0.6;
       ctx.stroke();
       ctx.globalAlpha = 1;
-
-      // Show count on dots
-      if (count >= 50 && dotRadius >= 6) {
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 7px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(count, x, yCenter + 2);
-      }
     });
   });
 
@@ -1198,14 +1174,21 @@ function drawCBSThroughputGraph(canvasId, mode) {
   const ppsPerTc = Math.round(state.cbs.pps / state.cbs.selectedTCs.length);
   const targetRateKbps = ppsPerTc * CONFIG.packetBits / 1000; // Target TX rate
 
+  // Calculate actual elapsed time from history
+  const rxHistory = state.cbs.rxHistory;
+  const elapsedSec = rxHistory.length > 1
+    ? (rxHistory[rxHistory.length - 1].time - rxHistory[0].time) / 1000
+    : duration;
+  const actualDuration = Math.max(elapsedSec, 1); // At least 1 second
+
   tcs.forEach(tc => {
     if (mode === 'tx') {
       // TX shows target/configured rate - same for all TCs (stable)
       throughputs[tc] = state.cbs.selectedTCs.includes(tc) ? targetRateKbps : 0;
     } else {
-      // RX shows actual received rate from history
-      const total = state.cbs.rxHistory.reduce((s, d) => s + (d.tc[tc] || 0), 0);
-      throughputs[tc] = (total / duration) * CONFIG.packetBits / 1000;
+      // RX shows actual received rate (packets / elapsed time)
+      const total = rxHistory.reduce((s, d) => s + (d.tc[tc] || 0), 0);
+      throughputs[tc] = (total / actualDuration) * CONFIG.packetBits / 1000;
     }
     if (throughputs[tc] > maxThroughput) maxThroughput = throughputs[tc];
   });

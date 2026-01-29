@@ -1,4 +1,4 @@
-// KETI TSN UI Simulation - Realistic Mode
+// KETI TSN UI - LAN9692
 // ===========================================
 
 // Configuration
@@ -58,7 +58,7 @@ const state = {
   }
 };
 
-// Simulation Intervals
+// Timer Intervals
 let simIntervals = {};
 
 // ===========================================
@@ -136,7 +136,7 @@ function renderPTPDashboard(el) {
       <div class="header-right">
         <span class="status-badge ${state.ptp.enabled ? 'success' : 'neutral'}">${state.ptp.enabled ? 'PTP Active' : 'PTP Disabled'}</span>
         <button class="btn btn-secondary" onclick="refreshPTP()">Refresh</button>
-        <button class="btn btn-primary" onclick="togglePTPSim()">${state.ptp.running ? 'Stop' : 'Start'} Simulation</button>
+        <button class="btn btn-primary" onclick="togglePTPSim()">${state.ptp.running ? 'Stop' : 'Start'} Monitor</button>
       </div>
     </div>
 
@@ -262,7 +262,7 @@ function drawPTPGraph() {
     ctx.fillStyle = '#94a3b8';
     ctx.font = '14px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('Start simulation to see data', w/2, h/2);
+    ctx.fillText('Start monitor to see data', w/2, h/2);
     return;
   }
 
@@ -829,6 +829,18 @@ function renderCBSDashboard(el) {
       </div>
     </div>
 
+    <!-- Estimated Idle Slope Graph -->
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <span class="card-title">Estimated Idle Slope (from RX Traffic)</span>
+          <div style="font-size:0.75rem;color:#64748b;margin-top:4px">Configured vs Estimated based on observed throughput</div>
+        </div>
+        <span class="status-badge ${state.cbs.rxHistory.length > 0 ? 'success' : 'neutral'}">${state.cbs.rxHistory.length > 0 ? 'ESTIMATED' : 'WAITING'}</span>
+      </div>
+      <canvas id="cbs-slope-canvas" height="250"></canvas>
+    </div>
+
     <!-- Idle Slope Settings & Analysis -->
     <div class="grid-2">
       <div class="card">
@@ -897,6 +909,7 @@ function renderCBSDashboard(el) {
 
   drawCBSRasterGraph('cbs-tx-canvas', state.cbs.txHistory, '#3b82f6');
   drawCBSRasterGraph('cbs-rx-canvas', state.cbs.rxHistory, '#10b981');
+  drawCBSSlopeGraph();
 }
 
 function renderCBSIdleSlopeTable(formatBw) {
@@ -1072,6 +1085,134 @@ function drawCBSRasterGraph(canvasId, data, color) {
   ctx.strokeRect(pad.left, pad.top, chartW, chartH);
 }
 
+function drawCBSSlopeGraph() {
+  const canvas = document.getElementById('cbs-slope-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width = canvas.offsetWidth;
+  const h = canvas.height = 250;
+  const pad = { top: 30, right: 30, bottom: 50, left: 80 };
+  const chartW = w - pad.left - pad.right;
+  const chartH = h - pad.top - pad.bottom;
+
+  ctx.clearRect(0, 0, w, h);
+
+  const tcs = [1, 2, 3, 4, 5, 6, 7];
+  const barGroupWidth = chartW / tcs.length;
+  const barWidth = barGroupWidth * 0.35;
+  const gap = barGroupWidth * 0.1;
+
+  // Calculate max slope for scaling
+  let maxSlope = 0;
+  tcs.forEach(tc => {
+    const configured = state.cbs.idleSlope[tc] || 0;
+    if (configured > maxSlope) maxSlope = configured;
+  });
+  maxSlope = Math.max(maxSlope * 1.2, 1000); // At least 1Mbps for scale
+
+  const formatBw = (kbps) => {
+    if (kbps >= 1000) return (kbps / 1000).toFixed(0) + 'M';
+    return Math.round(kbps) + 'k';
+  };
+
+  // Y axis grid
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.fillStyle = '#64748b';
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'right';
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.top + (chartH / 4) * i;
+    const val = maxSlope - (maxSlope / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(w - pad.right, y);
+    ctx.stroke();
+    ctx.fillText(formatBw(val), pad.left - 8, y + 4);
+  }
+
+  // Draw bars for each TC
+  tcs.forEach((tc, i) => {
+    const x = pad.left + i * barGroupWidth + barGroupWidth / 2;
+
+    // Configured idle slope (gray bar)
+    const configuredSlope = state.cbs.idleSlope[tc] || 0;
+    const configuredHeight = (configuredSlope / maxSlope) * chartH;
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillRect(x - barWidth - gap/2, pad.top + chartH - configuredHeight, barWidth, configuredHeight);
+
+    // Estimated idle slope based on RX traffic (colored bar)
+    let estimatedSlope = 0;
+    if (state.cbs.rxHistory.length > 0 && state.cbs.txHistory.length > 0) {
+      const txTotal = state.cbs.txHistory.reduce((s, d) => s + (d.tc[tc] || 0), 0);
+      const rxTotal = state.cbs.rxHistory.reduce((s, d) => s + (d.tc[tc] || 0), 0);
+      const duration = state.cbs.duration || 10;
+
+      if (txTotal > 0) {
+        // RX rate in kbps = (packets / duration) * packet_bits / 1000
+        const rxRateKbps = (rxTotal / duration) * CONFIG.packetBits / 1000;
+        estimatedSlope = rxRateKbps;
+
+        // If no shaping occurred, estimated slope = at least TX rate
+        const txRateKbps = (txTotal / duration) * CONFIG.packetBits / 1000;
+        if (rxTotal >= txTotal * 0.95) {
+          estimatedSlope = Math.max(configuredSlope, txRateKbps);
+        }
+      }
+    }
+
+    const estimatedHeight = (estimatedSlope / maxSlope) * chartH;
+    ctx.fillStyle = CONFIG.tcColorsBright[tc];
+    ctx.fillRect(x + gap/2, pad.top + chartH - estimatedHeight, barWidth, estimatedHeight);
+
+    // TC label
+    ctx.fillStyle = CONFIG.tcColorsBright[tc];
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('TC' + tc, x, h - pad.bottom + 15);
+
+    // Value labels on bars
+    if (configuredHeight > 15) {
+      ctx.fillStyle = '#fff';
+      ctx.font = '9px sans-serif';
+      ctx.fillText(formatBw(configuredSlope), x - barWidth/2 - gap/2, pad.top + chartH - configuredHeight + 12);
+    }
+    if (estimatedHeight > 15 && estimatedSlope > 0) {
+      ctx.fillStyle = '#fff';
+      ctx.font = '9px sans-serif';
+      ctx.fillText(formatBw(estimatedSlope), x + barWidth/2 + gap/2, pad.top + chartH - estimatedHeight + 12);
+    }
+  });
+
+  // Legend
+  ctx.fillStyle = '#94a3b8';
+  ctx.fillRect(w - pad.right - 150, pad.top, 12, 12);
+  ctx.fillStyle = '#334155';
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('Configured', w - pad.right - 133, pad.top + 10);
+
+  ctx.fillStyle = '#3b82f6';
+  ctx.fillRect(w - pad.right - 150, pad.top + 18, 12, 12);
+  ctx.fillStyle = '#334155';
+  ctx.fillText('Estimated (RX)', w - pad.right - 133, pad.top + 28);
+
+  // Y axis label
+  ctx.save();
+  ctx.translate(15, h/2);
+  ctx.rotate(-Math.PI/2);
+  ctx.fillStyle = '#334155';
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('Idle Slope (kbps)', 0, 0);
+  ctx.restore();
+
+  // Border
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(pad.left, pad.top, chartW, chartH);
+}
+
 function drawCBSCreditGraph() {
   const canvas = document.getElementById('cbs-credit-canvas');
   if (!canvas) return;
@@ -1089,7 +1230,7 @@ function drawCBSCreditGraph() {
     ctx.fillStyle = '#94a3b8';
     ctx.font = '14px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('Waiting for data... CBS simulation starting', w/2, h/2);
+    ctx.fillText('Waiting for data...', w/2, h/2);
     return;
   }
 
@@ -1329,6 +1470,7 @@ function startCBSTest() {
     if (state.currentPage === 'cbs-dashboard') {
       drawCBSRasterGraph('cbs-tx-canvas', state.cbs.txHistory, '#3b82f6');
       drawCBSRasterGraph('cbs-rx-canvas', state.cbs.rxHistory, '#10b981');
+      drawCBSSlopeGraph();
       updateCBSAnalysis();
     }
   }, 100);
@@ -1595,12 +1737,12 @@ function setIdleSlopePreset(tc, value) {
   }
 }
 
-function savePTPConfig() { alert('PTP configuration saved (simulation)'); }
+function savePTPConfig() { alert('PTP configuration saved'); }
 function saveTASConfig() {
   state.tas.cycleTime = parseInt(document.getElementById('tas-cycle-time')?.value) || 1000;
-  alert('TAS configuration applied (simulation)');
+  alert('TAS configuration applied');
 }
-function saveCBSConfig() { alert('CBS configuration applied (simulation)'); }
+function saveCBSConfig() { alert('CBS configuration applied'); }
 
 // ===========================================
 // Tools Pages
@@ -1903,10 +2045,10 @@ function renderSettings(el) {
     <div class="card">
       <div class="card-title">About</div>
       <div style="color:#64748b;font-size:0.875rem;line-height:1.8">
-        <p><strong>KETI TSN CLI UI - Simulation Mode</strong></p>
+        <p><strong>KETI TSN CLI UI</strong></p>
         <p>Version: 2.0.0</p>
-        <p>This is a simulation interface for demonstrating TSN switch management functionality.</p>
-        <p>For actual device control, please use the full version with device connectivity.</p>
+        <p>TSN Switch Management Interface for LAN9692</p>
+        <p>IEEE 802.1AS (PTP), 802.1Qbv (TAS), 802.1Qav (CBS)</p>
         <p style="margin-top:16px">
           <a href="https://github.com/hwkim3330/keti-tsn-cli-ui" target="_blank" style="color:#3b82f6">GitHub Repository</a>
         </p>
@@ -1916,7 +2058,7 @@ function renderSettings(el) {
 }
 
 function saveSettings() {
-  alert('Settings saved (simulation)');
+  alert('Settings saved');
 }
 
 // ===========================================

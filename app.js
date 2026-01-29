@@ -39,12 +39,14 @@ const state = {
   },
   cbs: {
     port: 8,
-    idleSlope: {0: 1000000, 1: 500, 2: 1000, 3: 2000, 4: 5000, 5: 10000, 6: 20000, 7: 50000},
+    // Idle slopes in kbps - dramatically different to show shaping effect
+    // TC1: very low (will be heavily shaped), TC7: high (minimal shaping)
+    idleSlope: {0: 1000000, 1: 100, 2: 300, 3: 800, 4: 2000, 5: 5000, 6: 15000, 7: 50000},
     testRunning: false,
     selectedTCs: [1, 2, 3, 4, 5, 6, 7],
     txHistory: [],
     rxHistory: [],
-    pps: 5000,
+    pps: 7000,
     duration: 10
   },
   traffic: {
@@ -597,22 +599,45 @@ function drawTASRasterGraph(canvasId, data, color) {
 
   ctx.clearRect(0, 0, w, h);
 
+  const cycleTime = state.tas.cycleTime;
+  const slotDuration = cycleTime / 8;
+  const maxTime = 9000;
+
+  // Draw slot background stripes for RX graph (to show staircase expectation)
+  const isRxGraph = canvasId.includes('rx');
+  if (isRxGraph && state.tas.enabled) {
+    for (let t = 0; t < maxTime; t += cycleTime) {
+      for (let slot = 0; slot < 8; slot++) {
+        const slotStart = t + slot * slotDuration;
+        const slotEnd = slotStart + slotDuration;
+        const x1 = pad.left + (slotStart / maxTime) * chartW;
+        const x2 = pad.left + (slotEnd / maxTime) * chartW;
+        const y = pad.top + slot * rowH;
+
+        // Highlight the expected slot for this TC
+        ctx.fillStyle = CONFIG.tcColorsBright[slot] + '15';
+        ctx.fillRect(x1, y, x2 - x1, rowH);
+      }
+    }
+  }
+
   // TC rows
   for (let tc = 0; tc < 8; tc++) {
     const y = pad.top + tc * rowH;
-    ctx.fillStyle = state.tas.selectedTCs.includes(tc) ? CONFIG.tcColors[tc] + '10' : '#fafafa';
-    ctx.fillRect(pad.left, y, chartW, rowH);
+    if (!isRxGraph) {
+      ctx.fillStyle = state.tas.selectedTCs.includes(tc) ? CONFIG.tcColorsBright[tc] + '08' : '#fafafa';
+      ctx.fillRect(pad.left, y, chartW, rowH);
+    }
     ctx.strokeStyle = '#e2e8f0';
     ctx.strokeRect(pad.left, y, chartW, rowH);
 
-    ctx.fillStyle = state.tas.selectedTCs.includes(tc) ? CONFIG.tcColors[tc] : '#94a3b8';
+    ctx.fillStyle = state.tas.selectedTCs.includes(tc) ? CONFIG.tcColorsBright[tc] : '#94a3b8';
     ctx.font = '9px sans-serif';
     ctx.textAlign = 'right';
     ctx.fillText('TC' + tc, pad.left - 6, y + rowH/2 + 3);
   }
 
   // X axis grid
-  const maxTime = 9000;
   for (let t = 0; t <= maxTime; t += 1000) {
     const x = pad.left + (t / maxTime) * chartW;
     ctx.strokeStyle = '#e2e8f0';
@@ -629,25 +654,38 @@ function drawTASRasterGraph(canvasId, data, color) {
     ctx.fillText((t/1000) + 's', x, h - pad.bottom + 12);
   }
 
-  // Data bars
-  const barW = Math.max(chartW / (maxTime / 500) - 2, 4);
+  // Scatter plot - draw dots for each packet
   data.forEach(d => {
     const x = pad.left + (d.time / maxTime) * chartW;
     [0,1,2,3,4,5,6,7].forEach(tc => {
       const count = d.tc[tc] || 0;
       if (count === 0) return;
-      const y = pad.top + tc * rowH + 1;
-      const maxPkts = 50;
-      const intensity = Math.min(count / maxPkts, 1);
-      ctx.fillStyle = CONFIG.tcColors[tc];
-      ctx.globalAlpha = 0.4 + intensity * 0.6;
-      ctx.fillRect(x - barW/2, y, barW, rowH - 2);
+
+      const yCenter = pad.top + tc * rowH + rowH / 2;
+      const dotRadius = Math.min(3 + count * 0.3, 8);
+      const intensity = Math.min(count / 30, 1);
+
+      // Draw dot
+      ctx.beginPath();
+      ctx.arc(x, yCenter, dotRadius, 0, Math.PI * 2);
+      ctx.fillStyle = CONFIG.tcColorsBright[tc];
+      ctx.globalAlpha = 0.6 + intensity * 0.4;
+      ctx.fill();
       ctx.globalAlpha = 1;
+
+      // Draw packet count if significant
+      if (count > 5) {
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 7px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(count, x, yCenter + 2);
+      }
     });
   });
 
   // Border
-  ctx.strokeStyle = '#e2e8f0';
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.lineWidth = 1;
   ctx.strokeRect(pad.left, pad.top, chartW, chartH);
 }
 
@@ -674,7 +712,7 @@ function startTASTest() {
   state.tas.testRunning = true;
   state.tas.txHistory = [];
   state.tas.rxHistory = [];
-  state.tas.rxSlotAccum = {}; // Accumulated packets per TC waiting for their slot
+  state.tas.rxSlotAccum = {};
   state.tas.selectedTCs.forEach(tc => { state.tas.rxSlotAccum[tc] = 0; });
 
   const pps = parseInt(document.getElementById('tas-pps')?.value) || 100;
@@ -683,12 +721,13 @@ function startTASTest() {
   const cycleTime = state.tas.cycleTime;
   const slotDuration = cycleTime / 8;
   let elapsed = 0;
-
-  // Track last slot to detect slot changes
   let lastSlot = -1;
 
+  // Interval should be smaller than slot duration for clear visualization
+  const interval = Math.min(slotDuration / 2, 50);
+
   simIntervals.tas = setInterval(() => {
-    elapsed += 50;
+    elapsed += interval;
     if (elapsed > maxTime) {
       stopTASTest();
       return;
@@ -697,37 +736,35 @@ function startTASTest() {
     const txEntry = { time: elapsed, tc: {} };
     const rxEntry = { time: elapsed, tc: {} };
 
-    // Calculate current slot in cycle
+    // Calculate current slot in cycle (0-7)
     const cyclePosition = elapsed % cycleTime;
-    const currentSlot = Math.floor(cyclePosition / slotDuration);
+    const currentSlot = Math.floor(cyclePosition / slotDuration) % 8;
     const slotChanged = currentSlot !== lastSlot;
     lastSlot = currentSlot;
 
     state.tas.selectedTCs.forEach(tc => {
-      // TX: Packets are generated uniformly across all TCs
-      const txPackets = Math.round((pps / state.tas.selectedTCs.length) * 0.05 * (0.8 + Math.random() * 0.4));
+      // TX: Generate packets uniformly for ALL TCs
+      const baseRate = (pps / state.tas.selectedTCs.length) * (interval / 1000);
+      const txPackets = Math.round(baseRate * (0.8 + Math.random() * 0.4));
       txEntry.tc[tc] = txPackets;
 
       if (state.tas.enabled) {
-        // IEEE 802.1Qbv TAS: Perfect staircase - only ONE TC per slot
-        // Accumulate incoming packets
+        // Accumulate packets
         state.tas.rxSlotAccum[tc] = (state.tas.rxSlotAccum[tc] || 0) + txPackets;
 
-        // Perfect staircase: TC only transmits in its assigned slot
-        // TC0 -> Slot 0, TC1 -> Slot 1, ... TC7 -> Slot 7
-        const isMySlot = (tc === currentSlot);
-
-        if (isMySlot) {
-          // Gate OPEN - release ALL accumulated packets as burst
-          const releasedPackets = state.tas.rxSlotAccum[tc];
-          rxEntry.tc[tc] = releasedPackets;
+        // STAIRCASE PATTERN: Each TC transmits ONLY in its assigned slot
+        // TC1 -> Slot1, TC2 -> Slot2, etc.
+        // Only the TC matching current slot releases packets
+        if (tc === currentSlot && state.tas.selectedTCs.includes(tc)) {
+          // This TC's gate is OPEN - release accumulated packets
+          rxEntry.tc[tc] = state.tas.rxSlotAccum[tc];
           state.tas.rxSlotAccum[tc] = 0;
         } else {
-          // Gate CLOSED - no packets pass, accumulate in queue
+          // Gate CLOSED - no output
           rxEntry.tc[tc] = 0;
         }
       } else {
-        // TAS disabled: all traffic passes through immediately
+        // TAS disabled - direct pass through
         rxEntry.tc[tc] = txPackets;
       }
     });
@@ -735,17 +772,15 @@ function startTASTest() {
     state.tas.txHistory.push(txEntry);
     state.tas.rxHistory.push(rxEntry);
 
-    // Keep last 200 entries for better visualization
-    if (state.tas.txHistory.length > 200) state.tas.txHistory.shift();
-    if (state.tas.rxHistory.length > 200) state.tas.rxHistory.shift();
+    if (state.tas.txHistory.length > 250) state.tas.txHistory.shift();
+    if (state.tas.rxHistory.length > 250) state.tas.rxHistory.shift();
 
     if (state.currentPage === 'tas-dashboard') {
       drawTASRasterGraph('tas-tx-canvas', state.tas.txHistory, '#3b82f6');
       drawTASRasterGraph('tas-rx-canvas', state.tas.rxHistory, '#10b981');
-      // Update predicted GCL heatmap
       updatePredictedGCLHeatmap();
     }
-  }, 50);
+  }, interval);
 
   renderPage('tas-dashboard');
 }
@@ -1033,10 +1068,22 @@ function drawCBSRasterGraph(canvasId, data, color) {
 
   ctx.clearRect(0, 0, w, h);
 
-  // TC rows (1-7, skip 0)
+  const isRxGraph = canvasId.includes('rx');
+
+  // TC rows
   for (let tc = 0; tc < 8; tc++) {
     const y = pad.top + tc * rowH;
-    ctx.fillStyle = state.cbs.selectedTCs.includes(tc) ? CONFIG.tcColorsBright[tc] + '15' : '#fafafa';
+
+    // For RX graph, show shaping indicator based on idle slope
+    if (isRxGraph && state.cbs.selectedTCs.includes(tc)) {
+      const slope = state.cbs.idleSlope[tc] || 0;
+      const maxSlope = 50000;
+      const shapingLevel = 1 - Math.min(slope / maxSlope, 1);
+      // Higher shaping (lower slope) = more red tint
+      ctx.fillStyle = `rgba(239, 68, 68, ${shapingLevel * 0.15})`;
+    } else {
+      ctx.fillStyle = state.cbs.selectedTCs.includes(tc) ? CONFIG.tcColorsBright[tc] + '10' : '#fafafa';
+    }
     ctx.fillRect(pad.left, y, chartW, rowH);
     ctx.strokeStyle = '#e2e8f0';
     ctx.strokeRect(pad.left, y, chartW, rowH);
@@ -1066,25 +1113,37 @@ function drawCBSRasterGraph(canvasId, data, color) {
     ctx.fillText((t/1000) + 's', x, h - pad.bottom + 12);
   }
 
-  // Data bars
-  const barW = Math.max(chartW / (maxTime / 100) - 1, 3);
+  // Scatter plot - draw dots
   data.forEach(d => {
     const x = pad.left + (d.time / maxTime) * chartW;
     [0,1,2,3,4,5,6,7].forEach(tc => {
       const count = d.tc[tc] || 0;
       if (count === 0) return;
-      const y = pad.top + tc * rowH + 1;
-      const maxPkts = 30;
-      const intensity = Math.min(count / maxPkts, 1);
+
+      const yCenter = pad.top + tc * rowH + rowH / 2;
+      const dotRadius = Math.min(2 + count * 0.4, 9);
+      const intensity = Math.min(count / 20, 1);
+
+      ctx.beginPath();
+      ctx.arc(x, yCenter, dotRadius, 0, Math.PI * 2);
       ctx.fillStyle = CONFIG.tcColorsBright[tc];
-      ctx.globalAlpha = 0.4 + intensity * 0.6;
-      ctx.fillRect(x - barW/2, y, barW, rowH - 2);
+      ctx.globalAlpha = 0.5 + intensity * 0.5;
+      ctx.fill();
       ctx.globalAlpha = 1;
+
+      // Show count on larger dots
+      if (count >= 8 && dotRadius > 5) {
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 7px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(count, x, yCenter + 2);
+      }
     });
   });
 
   // Border
-  ctx.strokeStyle = '#e2e8f0';
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.lineWidth = 1;
   ctx.strokeRect(pad.left, pad.top, chartW, chartH);
 }
 
@@ -1427,6 +1486,9 @@ function startCBSTest() {
   const maxTime = (duration + 2) * 1000;
   let elapsed = 0;
 
+  // Traffic rate per TC in kbps (for comparison with idle slope)
+  const trafficRateKbps = ppsPerTc * CONFIG.packetSize * 8 / 1000;
+
   simIntervals.cbs = setInterval(() => {
     elapsed += 100;
     if (elapsed > maxTime) {
@@ -1438,35 +1500,36 @@ function startCBSTest() {
     const rxEntry = { time: elapsed, tc: {} };
 
     state.cbs.selectedTCs.forEach(tc => {
-      // TX: Packets generated uniformly with slight variance
-      const txPackets = Math.round(ppsPerTc * 0.1 * (0.8 + Math.random() * 0.4));
+      // TX: ALL TCs generate same amount of packets (uniform)
+      const txPackets = Math.round(ppsPerTc * 0.1 * (0.85 + Math.random() * 0.3));
       txEntry.tc[tc] = txPackets;
 
-      // RX: Apply CBS shaping based on idle slope
-      // Lower idle slope = more shaping = fewer RX packets
+      // RX: CBS shaping - DRAMATIC difference based on idle slope
       const idleSlope = state.cbs.idleSlope[tc];
-      const trafficRateKbps = ppsPerTc * CONFIG.packetSize * 8 / 1000;
 
-      // Calculate shaping ratio based on idle slope vs traffic rate
-      // If traffic rate > idle slope, packets get shaped (dropped/delayed)
-      let shapingRatio = 1.0;
+      // Shaping ratio = idle_slope / traffic_rate
+      // Lower idle slope = more shaping = much fewer packets
+      let rxPackets;
       if (trafficRateKbps > idleSlope) {
-        // Shaping occurs - RX rate limited to idle slope
-        shapingRatio = idleSlope / trafficRateKbps;
-        // Add some variance
-        shapingRatio = shapingRatio * (0.85 + Math.random() * 0.3);
+        // Heavy shaping - limit to idle slope rate
+        const shapingRatio = idleSlope / trafficRateKbps;
+        // Add variance but keep it clear
+        rxPackets = Math.round(txPackets * shapingRatio * (0.8 + Math.random() * 0.4));
+        // Occasionally drop to 0 for very low slopes (heavy shaping visual)
+        if (shapingRatio < 0.1 && Math.random() < 0.3) {
+          rxPackets = 0;
+        }
       } else {
-        // No shaping needed - small random loss
-        shapingRatio = 0.95 + Math.random() * 0.05;
+        // No shaping - almost all packets pass
+        rxPackets = Math.round(txPackets * (0.95 + Math.random() * 0.05));
       }
 
-      rxEntry.tc[tc] = Math.round(txPackets * Math.min(shapingRatio, 1));
+      rxEntry.tc[tc] = Math.max(0, rxPackets);
     });
 
     state.cbs.txHistory.push(txEntry);
     state.cbs.rxHistory.push(rxEntry);
 
-    // Keep last 150 entries
     if (state.cbs.txHistory.length > 150) state.cbs.txHistory.shift();
     if (state.cbs.rxHistory.length > 150) state.cbs.rxHistory.shift();
 

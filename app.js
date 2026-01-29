@@ -871,16 +871,28 @@ function renderCBSDashboard(el) {
       </div>
     </div>
 
-    <!-- Estimated Idle Slope Graph -->
-    <div class="card">
-      <div class="card-header">
-        <div>
-          <span class="card-title">Estimated Idle Slope (from RX Traffic)</span>
-          <div style="font-size:0.75rem;color:#64748b;margin-top:4px">Configured vs Estimated based on observed throughput</div>
+    <!-- Throughput Comparison: TX vs RX -->
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <span class="card-title">TX Throughput</span>
+            <div style="font-size:0.75rem;color:#64748b;margin-top:4px">Transmitted traffic rate per TC</div>
+          </div>
+          <span class="status-badge ${state.cbs.txHistory.length > 0 ? 'success' : 'neutral'}">${state.cbs.txHistory.length > 0 ? 'MEASURED' : 'WAITING'}</span>
         </div>
-        <span class="status-badge ${state.cbs.rxHistory.length > 0 ? 'success' : 'neutral'}">${state.cbs.rxHistory.length > 0 ? 'ESTIMATED' : 'WAITING'}</span>
+        <canvas id="cbs-tx-throughput-canvas" height="220"></canvas>
       </div>
-      <canvas id="cbs-slope-canvas" height="250"></canvas>
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <span class="card-title">RX Throughput (Estimated Idle Slope)</span>
+            <div style="font-size:0.75rem;color:#64748b;margin-top:4px">Received rate = effective idle slope</div>
+          </div>
+          <span class="status-badge ${state.cbs.rxHistory.length > 0 ? 'success' : 'neutral'}">${state.cbs.rxHistory.length > 0 ? 'ESTIMATED' : 'WAITING'}</span>
+        </div>
+        <canvas id="cbs-rx-throughput-canvas" height="220"></canvas>
+      </div>
     </div>
 
     <!-- Idle Slope Settings & Analysis -->
@@ -951,7 +963,8 @@ function renderCBSDashboard(el) {
 
   drawCBSRasterGraph('cbs-tx-canvas', state.cbs.txHistory, '#3b82f6');
   drawCBSRasterGraph('cbs-rx-canvas', state.cbs.rxHistory, '#10b981');
-  drawCBSSlopeGraph();
+  drawCBSThroughputGraph('cbs-tx-throughput-canvas', 'tx');
+  drawCBSThroughputGraph('cbs-rx-throughput-canvas', 'rx');
 }
 
 function renderCBSIdleSlopeTable(formatBw) {
@@ -1158,130 +1171,138 @@ function drawCBSRasterGraph(canvasId, data, color) {
   ctx.strokeRect(pad.left, pad.top, chartW, chartH);
 }
 
-function drawCBSSlopeGraph() {
-  const canvas = document.getElementById('cbs-slope-canvas');
+function drawCBSThroughputGraph(canvasId, mode) {
+  const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
   const w = canvas.width = canvas.offsetWidth;
-  const h = canvas.height = 250;
-  const pad = { top: 30, right: 30, bottom: 50, left: 80 };
+  const h = canvas.height = 220;
+  const pad = { top: 20, right: 20, bottom: 45, left: 60 };
   const chartW = w - pad.left - pad.right;
   const chartH = h - pad.top - pad.bottom;
 
   ctx.clearRect(0, 0, w, h);
 
   const tcs = [1, 2, 3, 4, 5, 6, 7];
-  const barGroupWidth = chartW / tcs.length;
-  const barWidth = barGroupWidth * 0.35;
-  const gap = barGroupWidth * 0.1;
+  const barWidth = chartW / tcs.length * 0.7;
+  const barGap = chartW / tcs.length * 0.3;
 
-  // Calculate max slope for scaling
-  let maxSlope = 0;
+  const history = mode === 'tx' ? state.cbs.txHistory : state.cbs.rxHistory;
+  const duration = state.cbs.duration || 10;
+
+  // Calculate throughput for each TC
+  const throughputs = {};
+  let maxThroughput = 0;
   tcs.forEach(tc => {
-    const configured = state.cbs.idleSlope[tc] || 0;
-    if (configured > maxSlope) maxSlope = configured;
+    const total = history.reduce((s, d) => s + (d.tc[tc] || 0), 0);
+    // kbps = (packets / duration) * packet_bits / 1000
+    const kbps = (total / duration) * CONFIG.packetBits / 1000;
+    throughputs[tc] = kbps;
+    if (kbps > maxThroughput) maxThroughput = kbps;
   });
-  maxSlope = Math.max(maxSlope * 1.2, 1000); // At least 1Mbps for scale
+
+  // For RX, also show configured idle slope as reference line
+  if (mode === 'rx') {
+    tcs.forEach(tc => {
+      const slope = state.cbs.idleSlope[tc] || 0;
+      if (slope > maxThroughput) maxThroughput = slope;
+    });
+  }
+
+  maxThroughput = Math.max(maxThroughput * 1.2, 1000);
 
   const formatBw = (kbps) => {
-    if (kbps >= 1000) return (kbps / 1000).toFixed(0) + 'M';
+    if (kbps >= 1000) return (kbps / 1000).toFixed(1) + 'M';
     return Math.round(kbps) + 'k';
   };
 
   // Y axis grid
   ctx.strokeStyle = '#e2e8f0';
   ctx.fillStyle = '#64748b';
-  ctx.font = '10px sans-serif';
+  ctx.font = '9px sans-serif';
   ctx.textAlign = 'right';
   for (let i = 0; i <= 4; i++) {
     const y = pad.top + (chartH / 4) * i;
-    const val = maxSlope - (maxSlope / 4) * i;
+    const val = maxThroughput - (maxThroughput / 4) * i;
     ctx.beginPath();
+    ctx.setLineDash([2, 2]);
     ctx.moveTo(pad.left, y);
     ctx.lineTo(w - pad.right, y);
     ctx.stroke();
-    ctx.fillText(formatBw(val), pad.left - 8, y + 4);
+    ctx.setLineDash([]);
+    ctx.fillText(formatBw(val), pad.left - 5, y + 3);
   }
 
   // Draw bars for each TC
   tcs.forEach((tc, i) => {
-    const x = pad.left + i * barGroupWidth + barGroupWidth / 2;
+    const x = pad.left + i * (barWidth + barGap) + barGap / 2;
+    const throughput = throughputs[tc] || 0;
+    const barHeight = (throughput / maxThroughput) * chartH;
 
-    // Configured idle slope (gray bar)
-    const configuredSlope = state.cbs.idleSlope[tc] || 0;
-    const configuredHeight = (configuredSlope / maxSlope) * chartH;
-
-    ctx.fillStyle = '#94a3b8';
-    ctx.fillRect(x - barWidth - gap/2, pad.top + chartH - configuredHeight, barWidth, configuredHeight);
-
-    // Estimated idle slope based on RX traffic (colored bar)
-    let estimatedSlope = 0;
-    if (state.cbs.rxHistory.length > 0 && state.cbs.txHistory.length > 0) {
-      const txTotal = state.cbs.txHistory.reduce((s, d) => s + (d.tc[tc] || 0), 0);
-      const rxTotal = state.cbs.rxHistory.reduce((s, d) => s + (d.tc[tc] || 0), 0);
-      const duration = state.cbs.duration || 10;
-
-      if (txTotal > 0) {
-        // RX rate in kbps = (packets / duration) * packet_bits / 1000
-        const rxRateKbps = (rxTotal / duration) * CONFIG.packetBits / 1000;
-        estimatedSlope = rxRateKbps;
-
-        // If no shaping occurred, estimated slope = at least TX rate
-        const txRateKbps = (txTotal / duration) * CONFIG.packetBits / 1000;
-        if (rxTotal >= txTotal * 0.95) {
-          estimatedSlope = Math.max(configuredSlope, txRateKbps);
-        }
-      }
-    }
-
-    const estimatedHeight = (estimatedSlope / maxSlope) * chartH;
+    // Main bar
     ctx.fillStyle = CONFIG.tcColors[tc];
-    ctx.fillRect(x + gap/2, pad.top + chartH - estimatedHeight, barWidth, estimatedHeight);
+    ctx.fillRect(x, pad.top + chartH - barHeight, barWidth, barHeight);
+
+    // Border
+    ctx.strokeStyle = CONFIG.tcColors[tc];
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, pad.top + chartH - barHeight, barWidth, barHeight);
+
+    // For RX mode, show configured idle slope as reference marker
+    if (mode === 'rx' && state.cbs.idleSlope[tc]) {
+      const slopeY = pad.top + chartH - (state.cbs.idleSlope[tc] / maxThroughput) * chartH;
+      ctx.strokeStyle = '#dc2626';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x - 3, slopeY);
+      ctx.lineTo(x + barWidth + 3, slopeY);
+      ctx.stroke();
+    }
 
     // TC label
     ctx.fillStyle = CONFIG.tcColors[tc];
-    ctx.font = 'bold 11px sans-serif';
+    ctx.font = 'bold 10px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('TC' + tc, x, h - pad.bottom + 15);
+    ctx.fillText('TC' + tc, x + barWidth / 2, h - pad.bottom + 12);
 
-    // Value labels on bars
-    if (configuredHeight > 15) {
+    // Value on bar
+    if (barHeight > 18 && throughput > 0) {
       ctx.fillStyle = '#fff';
-      ctx.font = '9px sans-serif';
-      ctx.fillText(formatBw(configuredSlope), x - barWidth/2 - gap/2, pad.top + chartH - configuredHeight + 12);
-    }
-    if (estimatedHeight > 15 && estimatedSlope > 0) {
-      ctx.fillStyle = '#fff';
-      ctx.font = '9px sans-serif';
-      ctx.fillText(formatBw(estimatedSlope), x + barWidth/2 + gap/2, pad.top + chartH - estimatedHeight + 12);
+      ctx.font = 'bold 9px sans-serif';
+      ctx.fillText(formatBw(throughput), x + barWidth / 2, pad.top + chartH - barHeight + 12);
+    } else if (throughput > 0) {
+      ctx.fillStyle = CONFIG.tcColors[tc];
+      ctx.font = '8px sans-serif';
+      ctx.fillText(formatBw(throughput), x + barWidth / 2, pad.top + chartH - barHeight - 3);
     }
   });
 
-  // Legend
-  ctx.fillStyle = '#94a3b8';
-  ctx.fillRect(w - pad.right - 150, pad.top, 12, 12);
-  ctx.fillStyle = '#334155';
-  ctx.font = '10px sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText('Configured', w - pad.right - 133, pad.top + 10);
-
-  ctx.fillStyle = '#3b82f6';
-  ctx.fillRect(w - pad.right - 150, pad.top + 18, 12, 12);
-  ctx.fillStyle = '#334155';
-  ctx.fillText('Estimated (RX)', w - pad.right - 133, pad.top + 28);
+  // Legend for RX mode
+  if (mode === 'rx') {
+    ctx.strokeStyle = '#dc2626';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(w - pad.right - 90, pad.top + 5);
+    ctx.lineTo(w - pad.right - 70, pad.top + 5);
+    ctx.stroke();
+    ctx.fillStyle = '#64748b';
+    ctx.font = '9px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('Idle Slope', w - pad.right - 65, pad.top + 8);
+  }
 
   // Y axis label
   ctx.save();
-  ctx.translate(15, h/2);
-  ctx.rotate(-Math.PI/2);
-  ctx.fillStyle = '#334155';
-  ctx.font = '11px sans-serif';
+  ctx.translate(12, h / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillStyle = '#64748b';
+  ctx.font = '10px sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('Idle Slope (kbps)', 0, 0);
+  ctx.fillText('Throughput (kbps)', 0, 0);
   ctx.restore();
 
   // Border
-  ctx.strokeStyle = '#334155';
+  ctx.strokeStyle = '#cbd5e1';
   ctx.lineWidth = 1;
   ctx.strokeRect(pad.left, pad.top, chartW, chartH);
 }
@@ -1547,7 +1568,8 @@ function startCBSTest() {
     if (state.currentPage === 'cbs-dashboard') {
       drawCBSRasterGraph('cbs-tx-canvas', state.cbs.txHistory, '#3b82f6');
       drawCBSRasterGraph('cbs-rx-canvas', state.cbs.rxHistory, '#10b981');
-      drawCBSSlopeGraph();
+      drawCBSThroughputGraph('cbs-tx-throughput-canvas', 'tx');
+      drawCBSThroughputGraph('cbs-rx-throughput-canvas', 'rx');
       updateCBSAnalysis();
     }
   }, 100);

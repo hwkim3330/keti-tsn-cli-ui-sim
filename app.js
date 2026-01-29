@@ -684,8 +684,11 @@ function startTASTest() {
   const slotDuration = cycleTime / 8;
   let elapsed = 0;
 
+  // Track last slot to detect slot changes
+  let lastSlot = -1;
+
   simIntervals.tas = setInterval(() => {
-    elapsed += 50; // 50ms intervals for smoother staircase effect
+    elapsed += 50;
     if (elapsed > maxTime) {
       stopTASTest();
       return;
@@ -694,33 +697,33 @@ function startTASTest() {
     const txEntry = { time: elapsed, tc: {} };
     const rxEntry = { time: elapsed, tc: {} };
 
+    // Calculate current slot in cycle
+    const cyclePosition = elapsed % cycleTime;
+    const currentSlot = Math.floor(cyclePosition / slotDuration);
+    const slotChanged = currentSlot !== lastSlot;
+    lastSlot = currentSlot;
+
     state.tas.selectedTCs.forEach(tc => {
-      // TX: Packets are generated uniformly
+      // TX: Packets are generated uniformly across all TCs
       const txPackets = Math.round((pps / state.tas.selectedTCs.length) * 0.05 * (0.8 + Math.random() * 0.4));
       txEntry.tc[tc] = txPackets;
 
       if (state.tas.enabled) {
-        // IEEE 802.1Qbv TAS: Staircase pattern - each TC transmits in its own slot
+        // IEEE 802.1Qbv TAS: Perfect staircase - only ONE TC per slot
         // Accumulate incoming packets
         state.tas.rxSlotAccum[tc] = (state.tas.rxSlotAccum[tc] || 0) + txPackets;
 
-        // Each TC is assigned to slot matching its TC number (TC1->S1, TC2->S2, etc.)
-        const assignedSlot = tc;
+        // Perfect staircase: TC only transmits in its assigned slot
+        // TC0 -> Slot 0, TC1 -> Slot 1, ... TC7 -> Slot 7
+        const isMySlot = (tc === currentSlot);
 
-        // Calculate current position in cycle
-        const cyclePosition = elapsed % cycleTime;
-        const currentSlot = Math.floor(cyclePosition / slotDuration);
-
-        // RX: Packets only transmitted when in assigned slot (staircase pattern)
-        if (currentSlot === assignedSlot) {
-          // Gate is open! Release accumulated packets in burst
+        if (isMySlot) {
+          // Gate OPEN - release ALL accumulated packets as burst
           const releasedPackets = state.tas.rxSlotAccum[tc];
-          // Apply guard band loss (~3%)
-          const guardBandLoss = Math.random() < 0.03 ? 1 : 0;
-          rxEntry.tc[tc] = Math.max(0, releasedPackets - guardBandLoss);
+          rxEntry.tc[tc] = releasedPackets;
           state.tas.rxSlotAccum[tc] = 0;
         } else {
-          // Gate closed - packets wait in queue (no RX in this time slot)
+          // Gate CLOSED - no packets pass, accumulate in queue
           rxEntry.tc[tc] = 0;
         }
       } else {

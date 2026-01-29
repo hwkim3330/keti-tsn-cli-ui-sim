@@ -654,7 +654,7 @@ function drawTASRasterGraph(canvasId, data, color) {
     ctx.fillText((t/1000) + 's', x, h - pad.bottom + 12);
   }
 
-  // Scatter plot - draw dots for each packet
+  // Scatter plot - draw dots for each packet burst
   data.forEach(d => {
     const x = pad.left + (d.time / maxTime) * chartW;
     [0,1,2,3,4,5,6,7].forEach(tc => {
@@ -662,23 +662,29 @@ function drawTASRasterGraph(canvasId, data, color) {
       if (count === 0) return;
 
       const yCenter = pad.top + tc * rowH + rowH / 2;
-      const dotRadius = Math.min(3 + count * 0.3, 8);
-      const intensity = Math.min(count / 30, 1);
+      // Larger dots for better visibility
+      const dotRadius = Math.min(4 + count * 0.5, 12);
+      const intensity = Math.min(count / 20, 1);
 
-      // Draw dot
+      // Draw filled circle
       ctx.beginPath();
       ctx.arc(x, yCenter, dotRadius, 0, Math.PI * 2);
       ctx.fillStyle = CONFIG.tcColorsBright[tc];
-      ctx.globalAlpha = 0.6 + intensity * 0.4;
+      ctx.globalAlpha = 0.7 + intensity * 0.3;
       ctx.fill();
+
+      // Add border for clarity
+      ctx.strokeStyle = CONFIG.tcColorsBright[tc];
+      ctx.lineWidth = 2;
+      ctx.stroke();
       ctx.globalAlpha = 1;
 
-      // Draw packet count if significant
-      if (count > 5) {
+      // Show packet count
+      if (count >= 3 && dotRadius >= 6) {
         ctx.fillStyle = '#fff';
-        ctx.font = 'bold 7px sans-serif';
+        ctx.font = 'bold 8px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(count, x, yCenter + 2);
+        ctx.fillText(count, x, yCenter + 3);
       }
     });
   });
@@ -719,12 +725,12 @@ function startTASTest() {
   const duration = parseInt(document.getElementById('tas-duration')?.value) || 7;
   const maxTime = (duration + 2) * 1000;
   const cycleTime = state.tas.cycleTime;
-  const slotDuration = cycleTime / 8;
+  const slotDuration = cycleTime / 8; // 125ms per slot
   let elapsed = 0;
   let lastSlot = -1;
 
-  // Interval should be smaller than slot duration for clear visualization
-  const interval = Math.min(slotDuration / 2, 50);
+  // Use slot duration as interval - ONE data point per slot for CLEAR staircase
+  const interval = slotDuration;
 
   simIntervals.tas = setInterval(() => {
     elapsed += interval;
@@ -736,35 +742,33 @@ function startTASTest() {
     const txEntry = { time: elapsed, tc: {} };
     const rxEntry = { time: elapsed, tc: {} };
 
-    // Calculate current slot in cycle (0-7)
-    const cyclePosition = elapsed % cycleTime;
-    const currentSlot = Math.floor(cyclePosition / slotDuration) % 8;
-    const slotChanged = currentSlot !== lastSlot;
-    lastSlot = currentSlot;
+    // Current slot (0-7) - this determines which TC outputs
+    const currentSlot = Math.floor((elapsed % cycleTime) / slotDuration) % 8;
 
     state.tas.selectedTCs.forEach(tc => {
-      // TX: Generate packets uniformly for ALL TCs
-      const baseRate = (pps / state.tas.selectedTCs.length) * (interval / 1000);
+      // TX: ALL TCs generate packets uniformly
+      const baseRate = pps / state.tas.selectedTCs.length * (interval / 1000);
       const txPackets = Math.round(baseRate * (0.8 + Math.random() * 0.4));
       txEntry.tc[tc] = txPackets;
 
       if (state.tas.enabled) {
-        // Accumulate packets
+        // Accumulate for this TC
         state.tas.rxSlotAccum[tc] = (state.tas.rxSlotAccum[tc] || 0) + txPackets;
 
-        // STAIRCASE PATTERN: Each TC transmits ONLY in its assigned slot
-        // TC1 -> Slot1, TC2 -> Slot2, etc.
-        // Only the TC matching current slot releases packets
-        if (tc === currentSlot && state.tas.selectedTCs.includes(tc)) {
-          // This TC's gate is OPEN - release accumulated packets
+        // PERFECT STAIRCASE: ONLY the TC matching current slot outputs
+        // Slot 0 -> no selected TC (TC0 not selected)
+        // Slot 1 -> TC1 outputs
+        // Slot 2 -> TC2 outputs
+        // ... etc
+        if (tc === currentSlot) {
+          // This TC's slot - release ALL accumulated packets as one burst
           rxEntry.tc[tc] = state.tas.rxSlotAccum[tc];
           state.tas.rxSlotAccum[tc] = 0;
         } else {
-          // Gate CLOSED - no output
+          // NOT this TC's slot - absolutely NO output
           rxEntry.tc[tc] = 0;
         }
       } else {
-        // TAS disabled - direct pass through
         rxEntry.tc[tc] = txPackets;
       }
     });
@@ -772,8 +776,8 @@ function startTASTest() {
     state.tas.txHistory.push(txEntry);
     state.tas.rxHistory.push(rxEntry);
 
-    if (state.tas.txHistory.length > 250) state.tas.txHistory.shift();
-    if (state.tas.rxHistory.length > 250) state.tas.rxHistory.shift();
+    if (state.tas.txHistory.length > 200) state.tas.txHistory.shift();
+    if (state.tas.rxHistory.length > 200) state.tas.rxHistory.shift();
 
     if (state.currentPage === 'tas-dashboard') {
       drawTASRasterGraph('tas-tx-canvas', state.tas.txHistory, '#3b82f6');

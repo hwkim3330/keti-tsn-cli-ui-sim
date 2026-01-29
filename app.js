@@ -709,7 +709,7 @@ function startTASTest() {
   state.tas.rxSlotAccum = {};
   state.tas.selectedTCs.forEach(tc => { state.tas.rxSlotAccum[tc] = 0; });
 
-  const pps = parseInt(document.getElementById('tas-pps')?.value) || 100;
+  const pps = parseInt(document.getElementById('tas-pps')?.value) || 5000;
   const duration = parseInt(document.getElementById('tas-duration')?.value) || 7;
   const maxTime = (duration + 2) * 1000;
   const cycleTime = state.tas.cycleTime;
@@ -717,8 +717,8 @@ function startTASTest() {
   let elapsed = 0;
   let lastSlot = -1;
 
-  // Use slot duration as interval - ONE data point per slot for CLEAR staircase
-  const interval = slotDuration;
+  // Faster interval for more data points, staircase still works
+  const interval = 30; // 30ms interval for denser lines
 
   simIntervals.tas = setInterval(() => {
     elapsed += interval;
